@@ -28,10 +28,40 @@ export function CategoryFilter({ selectedCategory, onCategoryChange }: CategoryF
   useEffect(() => {
     async function fetchCategories() {
       try {
+        // First try to get categories with count
+        try {
+          const { data, error } = await supabase
+            .from('categories')
+            .select('id, name, count')
+            .order('count', { ascending: false });
+
+          if (error) {
+            throw error;
+          }
+
+          // Transform the data to match our Category interface
+          const transformedCategories = data.map((category: any) => ({
+            id: category.name.toLowerCase(),
+            label: category.name,
+            count: category.count || 0
+          }));
+
+          // Update the "All Projects" count to be the sum of all other categories
+          const totalCount = transformedCategories.reduce((sum: number, category: Category) => sum + category.count, 0);
+          const allWithCount = { ...ALL_CATEGORY, count: totalCount };
+
+          // Set the categories with "All Projects" at the beginning
+          setCategories([allWithCount, ...transformedCategories]);
+          return;
+        } catch (categoryError) {
+          console.error('Error fetching categories with count:', categoryError);
+          console.log('Falling back to fetching categories without count');
+        }
+
+        // Fallback: Just get categories without count
         const { data, error } = await supabase
           .from('categories')
-          .select('id, name, count')
-          .order('count', { ascending: false });
+          .select('id, name');
 
         if (error) {
           console.error('Error fetching categories:', error);
@@ -42,15 +72,11 @@ export function CategoryFilter({ selectedCategory, onCategoryChange }: CategoryF
         const transformedCategories = data.map((category: any) => ({
           id: category.name.toLowerCase(),
           label: category.name,
-          count: category.count || 0
+          count: 0 // Default count
         }));
 
-        // Update the "All Projects" count to be the sum of all other categories
-        const totalCount = transformedCategories.reduce((sum: number, category: Category) => sum + category.count, 0);
-        const allWithCount = { ...ALL_CATEGORY, count: totalCount };
-
         // Set the categories with "All Projects" at the beginning
-        setCategories([allWithCount, ...transformedCategories]);
+        setCategories([ALL_CATEGORY, ...transformedCategories]);
       } catch (error) {
         console.error('Error in fetchCategories:', error);
       } finally {
