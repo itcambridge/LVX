@@ -1,0 +1,27 @@
+{
+  "name": "FreeSpeech.Live",
+  "short_name": "FreeSpeech",
+  "description": "Your Voice is Live - A global social platform for activism and project funding",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#E10600",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["social", "productivity", "lifestyle"],
+  "lang": "en",
+  "dir": "ltr"
+}
