@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { Database } from "@/types/supabase"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -8,69 +10,144 @@ import { ProjectCard } from "@/components/project-card"
 import { CategoryFilter } from "@/components/category-filter"
 import { Search, TrendingUp, Filter } from "lucide-react"
 
-// Enhanced mock data
-const projects = [
-  {
-    id: 1,
-    title: "Clean Water for Rural Communities",
-    summary: "Building sustainable water systems in underserved areas across three villages in Kenya",
-    category: "Environment",
-    fundTotal: 12500,
-    fundGoal: 25000,
-    supporters: 89,
-    timeLeft: "12 days left",
-    creator: { name: "Sarah Chen", avatar: "/placeholder.svg?height=32&width=32" },
-    image: "/clean-water-project.png",
-    isLiked: true,
-    commentsCount: 23,
-  },
-  {
-    id: 2,
-    title: "Digital Literacy for Seniors",
-    summary: "Teaching essential tech skills to elderly community members to bridge the digital divide",
-    category: "Education",
-    fundTotal: 8200,
-    fundGoal: 15000,
-    supporters: 156,
-    timeLeft: "8 days left",
-    creator: { name: "Marcus Johnson", avatar: "/placeholder.svg?height=32&width=32" },
-    image: "/seniors-learning-computers.jpg",
-    isLiked: false,
-    commentsCount: 45,
-  },
-  {
-    id: 3,
-    title: "Local Food Security Initiative",
-    summary: "Creating community gardens and food distribution networks in underserved neighborhoods",
-    category: "Community",
-    fundTotal: 18750,
-    fundGoal: 30000,
-    supporters: 203,
-    timeLeft: "15 days left",
-    creator: { name: "Elena Rodriguez", avatar: "/placeholder.svg?height=32&width=32" },
-    image: "/community-garden.png",
-    isLiked: false,
-    commentsCount: 67,
-  },
-  {
-    id: 4,
-    title: "Mental Health Support Network",
-    summary: "Establishing peer support groups and counseling services for young adults",
-    category: "Healthcare",
-    fundTotal: 22100,
-    fundGoal: 35000,
-    supporters: 178,
-    timeLeft: "20 days left",
-    creator: { name: "Dr. Aisha Patel", avatar: "/placeholder.svg?height=32&width=32" },
-    image: "/mental-health-support-group.jpg",
-    isLiked: true,
-    commentsCount: 34,
-  },
-]
+// Define types for our project data to match ProjectCard component
+interface Project {
+  id: number;
+  title: string;
+  summary: string;
+  category: string;
+  fundTotal: number;
+  fundGoal: number;
+  supporters: number;
+  timeLeft: string;
+  creator: {
+    name: string;
+    avatar?: string;
+  };
+  image?: string;
+  isLiked?: boolean;
+  commentsCount: number;
+}
+
+// Helper function to calculate time left
+function calculateTimeLeft(endDate: string): string {
+  const end = new Date(endDate);
+  const now = new Date();
+  const diffTime = end.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return `${diffDays} days left`;
+}
+
+// Function to fetch projects from Supabase
+async function fetchProjects(): Promise<Project[]> {
+  // Type for the raw project data from Supabase
+  type RawProject = {
+    id: string;
+    title: string;
+    summary: string;
+    fund_total: number;
+    fund_goal: number;
+    supporters: number;
+    end_date: string | null;
+    categories: { id: string; name: string } | null;
+    creator_id: string | null;
+    users: { name: string; avatar: string | null } | null;
+  };
+  const { data, error } = await supabase
+    .from('projects')
+    .select(`
+      id,
+      title,
+      summary,
+      fund_total,
+      fund_goal,
+      supporters,
+      end_date,
+      categories(id, name),
+      creator_id,
+      users!creator_id(name, avatar)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching projects:', error);
+    return [];
+  }
+
+  // Get comment counts for each project
+  const projectIds = data.map((project: any) => project.id);
+  const { data: commentCounts, error: commentError } = await supabase
+    .from('comments')
+    .select('project_id, count')
+    .in('project_id', projectIds)
+    .group('project_id');
+
+  if (commentError) {
+    console.error('Error fetching comment counts:', commentError);
+  }
+
+  // Get project images
+  const { data: projectImages, error: imageError } = await supabase
+    .from('project_images')
+    .select('project_id, image_url')
+    .in('project_id', projectIds)
+    .order('display_order', { ascending: true });
+
+  if (imageError) {
+    console.error('Error fetching project images:', imageError);
+  }
+
+  // Transform the data to match the expected format
+  return data.map((project: any) => {
+    // Find comment count for this project
+    const commentData = commentCounts?.find((c: any) => c.project_id === project.id);
+    const commentCount = commentData ? parseInt(commentData.count) : 0;
+
+    // Find image for this project
+    const imageData = projectImages?.find((img: any) => img.project_id === project.id);
+    const imagePath = imageData?.image_url || "/placeholder.jpg";
+
+    return {
+      id: parseInt(project.id) || project.id.charCodeAt(0), // Convert string ID to number for compatibility
+      title: project.title,
+      summary: project.summary,
+      category: project.categories?.name || "Uncategorized",
+      fundTotal: project.fund_total || 0,
+      fundGoal: project.fund_goal || 0,
+      supporters: project.supporters || 0,
+      timeLeft: project.end_date ? calculateTimeLeft(project.end_date) : "Ongoing",
+      creator: { 
+        name: project.users?.name || "Anonymous", 
+        avatar: project.users?.avatar || "/placeholder.svg?height=32&width=32" 
+      },
+      image: imagePath,
+      isLiked: false, // This would need to be determined based on the current user
+      commentsCount: commentCount,
+    };
+  });
+}
 
 export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Fetch projects when component mounts
+  useEffect(() => {
+    async function loadProjects() {
+      try {
+        const projectData = await fetchProjects();
+        setProjects(projectData);
+      } catch (error) {
+        console.error("Error loading projects:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    loadProjects();
+  }, []);
 
   const filteredProjects = projects.filter((project) => {
     const matchesCategory = selectedCategory === "all" || project.category.toLowerCase() === selectedCategory
@@ -140,7 +217,13 @@ export default function HomePage() {
           <TrendingUp className="h-5 w-5 text-accent" />
         </div>
 
-        {filteredProjects.length === 0 ? (
+        {loading ? (
+          <Card className="text-center py-8">
+            <CardContent>
+              <p className="text-muted-foreground">Loading projects...</p>
+            </CardContent>
+          </Card>
+        ) : filteredProjects.length === 0 ? (
           <Card className="text-center py-8">
             <CardContent>
               <p className="text-muted-foreground">No projects found matching your criteria.</p>
