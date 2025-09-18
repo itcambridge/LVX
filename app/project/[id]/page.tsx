@@ -285,7 +285,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             </div>
             <div className="flex items-center gap-1">
               <Calendar className="h-4 w-4" />
-              <span>Ends {projectData.endDate}</span>
+              <span>Ends {projectData.endDate ? new Date(projectData.endDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Ongoing'}</span>
             </div>
           </div>
         </div>

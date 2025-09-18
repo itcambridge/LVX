@@ -119,6 +119,7 @@ async function fetchProjects(): Promise<Project[]> {
       fundGoal: project.fund_goal || 0,
       supporters: project.supporters || 0,
       timeLeft: project.end_date ? calculateTimeLeft(project.end_date) : "Ongoing",
+      endDate: project.end_date,
       creator: { 
         name: project.users?.name || "Anonymous", 
         avatar: project.users?.avatar || "/placeholder.svg?height=32&width=32" 

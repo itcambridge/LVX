@@ -15,6 +15,7 @@ interface ProjectCardProps {
     fundGoal: number
     supporters: number
     timeLeft: string
+    endDate?: string | null
     creator: {
       name: string
       avatar?: string
