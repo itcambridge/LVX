@@ -335,9 +335,9 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="comments">Comments</TabsTrigger>
+            <TabsTrigger value="roles">Roles</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
             <TabsTrigger value="updates">Updates</TabsTrigger>
-            <TabsTrigger value="roles">Roles</TabsTrigger>
           </TabsList>
 
           <TabsContent value="about" className="space-y-4">
