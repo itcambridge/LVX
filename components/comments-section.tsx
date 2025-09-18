@@ -1,79 +1,242 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Heart, Reply, MoreHorizontal } from "lucide-react"
 
-// Mock comments data
-const mockComments = [
-  {
-    id: 1,
-    author: { name: "Maria Santos", avatar: "/placeholder.svg?height=32&width=32" },
-    content:
-      "This is exactly what our community needs! I've seen firsthand how lack of clean water affects families. Thank you for taking action.",
-    timestamp: "2 hours ago",
-    likes: 12,
-    isLiked: false,
-  },
-  {
-    id: 2,
-    author: { name: "James Wilson", avatar: "/placeholder.svg?height=32&width=32" },
-    content:
-      "Great project! I work in water engineering too and your approach looks solid. Have you considered adding water quality testing equipment?",
-    timestamp: "5 hours ago",
-    likes: 8,
-    isLiked: true,
-  },
-  {
-    id: 3,
-    author: { name: "Aisha Mohamed", avatar: "/placeholder.svg?height=32&width=32" },
-    content: "Donated $50. Every child deserves access to clean water. Keep up the amazing work! 💧",
-    timestamp: "1 day ago",
-    likes: 15,
-    isLiked: false,
-  },
-]
+// Helper function to format timestamp
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) {
+    return 'Just now';
+  } else if (diffMins < 60) {
+    return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+  } else if (diffHours < 24) {
+    return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  } else if (diffDays < 30) {
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+  } else {
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+}
+
+// Interface for comment data
+interface Comment {
+  id: number;
+  project_id: string | number;
+  user_id: string;
+  content: string;
+  created_at: string;
+  likes: number;
+  author: {
+    name: string;
+    avatar: string;
+  };
+  isLiked: boolean;
+}
 
 interface CommentsSectionProps {
   projectId: string | number
   commentsCount: number
 }
 
-export function CommentsSection({ projectId, commentsCount }: CommentsSectionProps) {
+export function CommentsSection({ projectId, commentsCount: initialCommentsCount }: CommentsSectionProps) {
   const [newComment, setNewComment] = useState("")
-  const [comments, setComments] = useState(mockComments)
-
-  const handleSubmitComment = () => {
-    if (!newComment.trim()) return
-
-    const comment = {
-      id: comments.length + 1,
-      author: { name: "You", avatar: "/placeholder.svg?height=32&width=32" },
-      content: newComment,
-      timestamp: "Just now",
-      likes: 0,
-      isLiked: false,
+  const [comments, setComments] = useState<Comment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [commentsCount, setCommentsCount] = useState(initialCommentsCount)
+  const [submitting, setSubmitting] = useState(false)
+  
+  // Current user info - in a real app, this would come from auth
+  // For now, we'll use a mock user
+  const currentUser = {
+    id: 'current-user-id',
+    name: 'You',
+    avatar: '/placeholder-user.jpg'
+  }
+  
+  // Fetch comments from Supabase
+  useEffect(() => {
+    async function fetchComments() {
+      try {
+        setLoading(true);
+        
+        // Fetch comments for this project
+        const { data: commentsData, error: commentsError } = await supabase
+          .from('comments')
+          .select(`
+            id,
+            project_id,
+            user_id,
+            content,
+            created_at,
+            likes,
+            users(name, avatar)
+          `)
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false });
+        
+        if (commentsError) {
+          throw new Error(`Error fetching comments: ${commentsError.message}`);
+        }
+        
+        // Fetch liked comments for current user
+        const { data: likedComments, error: likedError } = await supabase
+          .from('comment_likes')
+          .select('comment_id')
+          .eq('user_id', currentUser.id);
+        
+        if (likedError) {
+          console.error('Error fetching liked comments:', likedError);
+        }
+        
+        // Create a set of liked comment IDs for quick lookup
+        const likedCommentIds = new Set(likedComments?.map((like: { comment_id: number }) => like.comment_id) || []);
+        
+        // Transform comments data
+        const formattedComments: Comment[] = commentsData.map((comment: any) => ({
+          id: comment.id,
+          project_id: comment.project_id,
+          user_id: comment.user_id,
+          content: comment.content,
+          created_at: comment.created_at,
+          likes: comment.likes || 0,
+          author: {
+            name: comment.users?.name || 'Anonymous',
+            avatar: comment.users?.avatar || '/placeholder.svg?height=32&width=32'
+          },
+          isLiked: likedCommentIds.has(comment.id)
+        }));
+        
+        setComments(formattedComments);
+        setCommentsCount(formattedComments.length);
+      } catch (err) {
+        console.error('Error in fetchComments:', err);
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      } finally {
+        setLoading(false);
+      }
     }
+    
+    fetchComments();
+  }, [projectId, currentUser.id]);
 
-    setComments([comment, ...comments])
-    setNewComment("")
+  const handleSubmitComment = async () => {
+    if (!newComment.trim() || submitting) return;
+    
+    setSubmitting(true);
+    
+    try {
+      // Insert comment into Supabase
+      const { data, error } = await supabase
+        .from('comments')
+        .insert({
+          project_id: projectId,
+          user_id: currentUser.id,
+          content: newComment,
+          created_at: new Date().toISOString(),
+          likes: 0
+        })
+        .select('id')
+        .single();
+      
+      if (error) {
+        throw new Error(`Error posting comment: ${error.message}`);
+      }
+      
+      // Add new comment to state
+      const newCommentObj: Comment = {
+        id: data.id,
+        project_id: projectId,
+        user_id: currentUser.id,
+        content: newComment,
+        created_at: new Date().toISOString(),
+        likes: 0,
+        author: {
+          name: currentUser.name,
+          avatar: currentUser.avatar
+        },
+        isLiked: false
+      };
+      
+      setComments([newCommentObj, ...comments]);
+      setCommentsCount(prev => prev + 1);
+      setNewComment("");
+    } catch (err) {
+      console.error('Error submitting comment:', err);
+      alert('Failed to post comment. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  const handleLikeComment = (commentId: number) => {
-    setComments(
-      comments.map((comment) =>
-        comment.id === commentId
-          ? {
-              ...comment,
-              isLiked: !comment.isLiked,
-              likes: comment.isLiked ? comment.likes - 1 : comment.likes + 1,
-            }
-          : comment,
-      ),
-    )
+  const handleLikeComment = async (commentId: number) => {
+    // Find the comment
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment) return;
+    
+    try {
+      if (comment.isLiked) {
+        // Unlike: Delete the like from comment_likes
+        const { error } = await supabase
+          .from('comment_likes')
+          .delete()
+          .eq('comment_id', commentId)
+          .eq('user_id', currentUser.id);
+        
+        if (error) throw error;
+        
+        // Decrement likes count in comments table
+        await supabase
+          .from('comments')
+          .update({ likes: Math.max(0, comment.likes - 1) })
+          .eq('id', commentId);
+      } else {
+        // Like: Insert a new like into comment_likes
+        const { error } = await supabase
+          .from('comment_likes')
+          .insert({
+            comment_id: commentId,
+            user_id: currentUser.id,
+            created_at: new Date().toISOString()
+          });
+        
+        if (error) throw error;
+        
+        // Increment likes count in comments table
+        await supabase
+          .from('comments')
+          .update({ likes: comment.likes + 1 })
+          .eq('id', commentId);
+      }
+      
+      // Update local state
+      setComments(
+        comments.map((c) =>
+          c.id === commentId
+            ? {
+                ...c,
+                isLiked: !c.isLiked,
+                likes: c.isLiked ? c.likes - 1 : c.likes + 1,
+              }
+            : c,
+        ),
+      );
+    } catch (err) {
+      console.error('Error liking/unliking comment:', err);
+    }
   }
 
   return (
@@ -118,7 +281,7 @@ export function CommentsSection({ projectId, commentsCount }: CommentsSectionPro
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{comment.author.name}</span>
-                      <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
+                      <span className="text-xs text-muted-foreground">{formatTimestamp(comment.created_at)}</span>
                     </div>
                     <Button variant="ghost" size="icon" className="h-6 w-6">
                       <MoreHorizontal className="h-3 w-3" />
