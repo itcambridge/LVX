@@ -131,26 +131,110 @@ async function fetchProjects(): Promise<Project[]> {
   });
 }
 
+// Helper function to format numbers with K, M, B suffixes
+function formatNumber(num: number): string {
+  if (num >= 1000000000) {
+    return (num / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+  }
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  }
+  return num.toString();
+}
+
+// Helper function to format currency with $ and K, M, B suffixes
+function formatCurrency(num: number): string {
+  return '$' + formatNumber(num);
+}
+
+// Function to fetch stats from Supabase
+async function fetchStats() {
+  try {
+    // Get count of active projects
+    const { count: projectCount, error: projectError } = await supabase
+      .from('projects')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+    
+    if (projectError) {
+      console.error('Error fetching project count:', projectError);
+      return { projectCount: 0, totalFunding: 0, supportersCount: 0 };
+    }
+    
+    // Get sum of all funding
+    const { data: fundingData, error: fundingError } = await supabase
+      .from('projects')
+      .select('fund_total');
+    
+    if (fundingError) {
+      console.error('Error fetching funding data:', fundingError);
+      return { projectCount: projectCount || 0, totalFunding: 0, supportersCount: 0 };
+    }
+    
+    const totalFunding = fundingData.reduce((sum: number, project: any) => sum + (project.fund_total || 0), 0);
+    
+    // Get sum of all supporters
+    const { data: supportersData, error: supportersError } = await supabase
+      .from('projects')
+      .select('supporters');
+    
+    if (supportersError) {
+      console.error('Error fetching supporters data:', supportersError);
+      return { projectCount: projectCount || 0, totalFunding, supportersCount: 0 };
+    }
+    
+    const supportersCount = supportersData.reduce((sum: number, project: any) => sum + (project.supporters || 0), 0);
+    
+    return {
+      projectCount: projectCount || 0,
+      totalFunding,
+      supportersCount
+    };
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    return { projectCount: 0, totalFunding: 0, supportersCount: 0 };
+  }
+}
+
 export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    projectCount: 0,
+    totalFunding: 0,
+    supportersCount: 0,
+    isLoading: true
+  })
 
-  // Fetch projects when component mounts
+  // Fetch projects and stats when component mounts
   useEffect(() => {
-    async function loadProjects() {
+    async function loadData() {
       try {
+        // Fetch projects
         const projectData = await fetchProjects();
         setProjects(projectData);
+        
+        // Fetch stats
+        const statsData = await fetchStats();
+        setStats({
+          projectCount: statsData.projectCount,
+          totalFunding: statsData.totalFunding,
+          supportersCount: statsData.supportersCount,
+          isLoading: false
+        });
       } catch (error) {
-        console.error("Error loading projects:", error);
+        console.error("Error loading data:", error);
       } finally {
         setLoading(false);
       }
     }
     
-    loadProjects();
+    loadData();
   }, []);
 
   const filteredProjects = projects.filter((project) => {
@@ -175,19 +259,37 @@ export default function HomePage() {
       <div className="grid grid-cols-3 gap-4">
         <Card className="text-center">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-accent">1,247</div>
+            <div className="text-2xl font-bold text-accent">
+              {stats.isLoading ? (
+                <div className="h-7 w-16 bg-muted/50 animate-pulse rounded mx-auto"></div>
+              ) : (
+                formatNumber(stats.projectCount)
+              )}
+            </div>
             <div className="text-xs text-muted-foreground">Active Projects</div>
           </CardContent>
         </Card>
         <Card className="text-center">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-accent">$2.1M</div>
+            <div className="text-2xl font-bold text-accent">
+              {stats.isLoading ? (
+                <div className="h-7 w-16 bg-muted/50 animate-pulse rounded mx-auto"></div>
+              ) : (
+                formatCurrency(stats.totalFunding)
+              )}
+            </div>
             <div className="text-xs text-muted-foreground">Total Funded</div>
           </CardContent>
         </Card>
         <Card className="text-center">
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-accent">45K</div>
+            <div className="text-2xl font-bold text-accent">
+              {stats.isLoading ? (
+                <div className="h-7 w-16 bg-muted/50 animate-pulse rounded mx-auto"></div>
+              ) : (
+                formatNumber(stats.supportersCount)
+              )}
+            </div>
             <div className="text-xs text-muted-foreground">Voices United</div>
           </CardContent>
         </Card>
