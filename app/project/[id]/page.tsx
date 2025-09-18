@@ -72,7 +72,7 @@ function calculateTimeLeft(endDate: string): string {
 
 export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const [showDonationPanel, setShowDonationPanel] = useState(false)
-  const [activeTab, setActiveTab] = useState("about")
+  const [activeTab, setActiveTab] = useState("comments")
   const [projectData, setProjectData] = useState<ProjectData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -334,10 +334,10 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="comments">Comments</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
             <TabsTrigger value="updates">Updates</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
-            <TabsTrigger value="comments">Comments</TabsTrigger>
           </TabsList>
 
           <TabsContent value="about" className="space-y-4">
