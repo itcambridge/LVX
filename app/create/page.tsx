@@ -375,10 +375,9 @@ const handleSubmit = async () => {
     if (formData.images.length > 0) {
       const projectImagesData = formData.images.map((imageUrl, index) => ({
         project_id: projectId,
-        url: imageUrl,
-        position: index,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        image_url: imageUrl,
+        display_order: index,
+        created_at: new Date().toISOString()
       }));
       
       const { error: imagesError } = await supabase
