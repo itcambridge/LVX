@@ -13,7 +13,7 @@ const SUGGESTED_AMOUNTS = [10, 25, 50, 100, 250]
 
 interface DonationPanelProps {
   project: {
-    id: number
+    id: string | number
     title: string
     fundGoal: number
     fundTotal: number

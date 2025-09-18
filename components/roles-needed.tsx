@@ -38,7 +38,7 @@ const rolesNeeded = [
 ]
 
 interface RolesNeededProps {
-  projectId: number
+  projectId: string | number
 }
 
 export function RolesNeeded({ projectId }: RolesNeededProps) {

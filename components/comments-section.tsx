@@ -38,7 +38,7 @@ const mockComments = [
 ]
 
 interface CommentsSectionProps {
-  projectId: number
+  projectId: string | number
   commentsCount: number
 }
 

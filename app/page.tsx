@@ -12,7 +12,7 @@ import { Search, TrendingUp, Filter } from "lucide-react"
 
 // Define types for our project data to match ProjectCard component
 interface Project {
-  id: number;
+  id: string;
   title: string;
   summary: string;
   category: string;
@@ -111,7 +111,7 @@ async function fetchProjects(): Promise<Project[]> {
     const imagePath = imageData?.image_url || "/placeholder.jpg";
 
     return {
-      id: parseInt(project.id) || project.id.charCodeAt(0), // Convert string ID to number for compatibility
+      id: project.id, // Keep the original UUID string
       title: project.title,
       summary: project.summary,
       category: project.categories?.name || "Uncategorized",
