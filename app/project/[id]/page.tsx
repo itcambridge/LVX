@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -25,66 +26,199 @@ import {
 import Link from "next/link"
 import Image from "next/image"
 
-// Mock project data - in real app would fetch from API
-const projectData = {
-  id: 1,
-  title: "Clean Water for Rural Communities",
-  summary: "Building sustainable water systems in underserved areas across three villages in Kenya",
-  description: `This project aims to provide clean, accessible water to three rural villages in Kenya that currently lack reliable water infrastructure. 
-
-Our approach includes:
-• Installing solar-powered water pumps
-• Building water storage tanks and distribution systems  
-• Training local technicians for maintenance
-• Establishing community water management committees
-
-The impact will be immediate and long-lasting, serving over 2,500 people including 800 children who currently walk hours daily to collect water from unsafe sources.
-
-All funds will go directly to materials, equipment, and local labor. We've partnered with established NGOs and have all necessary permits in place.`,
-  category: "Environment",
-  fundTotal: 12500,
-  fundGoal: 25000,
-  supporters: 89,
-  timeLeft: "12 days left",
-  endDate: "2024-02-15",
-  location: "Machakos County, Kenya",
+// Default project data structure
+interface ProjectData {
+  id: string;
+  title: string;
+  summary: string;
+  description: string | null;
+  category: string;
+  fundTotal: number;
+  fundGoal: number;
+  supporters: number;
+  timeLeft: string;
+  endDate: string | null;
+  location: string | null;
   creator: {
-    name: "Sarah Chen",
-    avatar: "/placeholder.svg?height=64&width=64",
-    bio: "Water engineer with 8 years experience in rural development projects across East Africa.",
-    verified: true,
-  },
-  images: ["/clean-water-project.png", "/water-well-construction.jpg", "/community-meeting-about-water-project.jpg"],
-  milestones: [
-    { title: "Site Survey & Permits", completed: true, date: "2024-01-05" },
-    { title: "Equipment Procurement", completed: true, date: "2024-01-15" },
-    { title: "Well Drilling", completed: false, date: "2024-02-01" },
-    { title: "Pump Installation", completed: false, date: "2024-02-10" },
-    { title: "Community Training", completed: false, date: "2024-02-20" },
-  ],
-  updates: [
-    {
-      id: 1,
-      date: "2024-01-20",
-      title: "Equipment Arrived Successfully",
-      content:
-        "All solar pumps and storage tanks have arrived at the project site. Local team is ready to begin installation.",
-    },
-    {
-      id: 2,
-      date: "2024-01-15",
-      title: "Community Meeting Held",
-      content:
-        "Met with village leaders and community members. Everyone is excited and committed to the project success.",
-    },
-  ],
-  isLiked: true,
-  commentsCount: 23,
+    name: string;
+    avatar: string | null;
+    bio: string | null;
+    verified: boolean;
+  };
+  images: string[];
+  milestones: {
+    title: string;
+    completed: boolean;
+    date: string;
+  }[];
+  updates: {
+    id: number;
+    date: string;
+    title: string;
+    content: string;
+  }[];
+  isLiked: boolean;
+  commentsCount: number;
+}
+
+// Helper function to calculate time left
+function calculateTimeLeft(endDate: string): string {
+  const end = new Date(endDate);
+  const now = new Date();
+  const diffTime = end.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return `${diffDays} days left`;
 }
 
 export default function ProjectDetailPage({ params }: { params: { id: string } }) {
   const [showDonationPanel, setShowDonationPanel] = useState(false)
   const [activeTab, setActiveTab] = useState("about")
+  const [projectData, setProjectData] = useState<ProjectData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchProjectData() {
+      try {
+        setLoading(true);
+        
+        // Fetch project data
+        const { data: project, error: projectError } = await supabase
+          .from('projects')
+          .select(`
+            *,
+            categories(name)
+          `)
+          .eq('id', params.id)
+          .single();
+        
+        if (projectError) {
+          throw new Error(`Error fetching project: ${projectError.message}`);
+        }
+        
+        if (!project) {
+          throw new Error('Project not found');
+        }
+        
+        // Fetch project images
+        const { data: images, error: imagesError } = await supabase
+          .from('project_images')
+          .select('image_url')
+          .eq('project_id', project.id)
+          .order('display_order', { ascending: true });
+        
+        if (imagesError) {
+          console.error('Error fetching project images:', imagesError);
+        }
+        
+        // Fetch project milestones
+        const { data: milestones, error: milestonesError } = await supabase
+          .from('project_milestones')
+          .select('*')
+          .eq('project_id', project.id)
+          .order('target_date', { ascending: true });
+        
+        if (milestonesError) {
+          console.error('Error fetching project milestones:', milestonesError);
+        }
+        
+        // Fetch project updates
+        const { data: updates, error: updatesError } = await supabase
+          .from('project_updates')
+          .select('*')
+          .eq('project_id', project.id)
+          .order('created_at', { ascending: false });
+        
+        if (updatesError) {
+          console.error('Error fetching project updates:', updatesError);
+        }
+        
+        // Fetch creator info
+        const { data: creator, error: creatorError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', project.creator_id || '')
+          .single();
+        
+        if (creatorError && creatorError.code !== 'PGRST116') { // PGRST116 is "not found"
+          console.error('Error fetching creator:', creatorError);
+        }
+        
+        // Transform data to match expected format
+        const formattedProject: ProjectData = {
+          id: project.id.toString(),
+          title: project.title,
+          summary: project.summary,
+          description: project.description,
+          category: project.categories?.name || 'Uncategorized',
+          fundTotal: project.fund_total || 0,
+          fundGoal: project.fund_goal || 0,
+          supporters: project.supporters || 0,
+          timeLeft: project.end_date ? calculateTimeLeft(project.end_date) : 'Ongoing',
+          endDate: project.end_date,
+          location: project.location,
+          creator: {
+            name: creator?.name || 'Anonymous',
+            avatar: creator?.avatar || '/placeholder.svg?height=64&width=64',
+            bio: creator?.bio || null,
+            verified: creator?.verified || false,
+          },
+          images: images?.map((img: any) => img.image_url) || ['/placeholder.jpg'],
+          milestones: milestones?.map((m: any) => ({
+            title: m.title,
+            completed: m.completed || false,
+            date: m.target_date ? new Date(m.target_date).toISOString().split('T')[0] : '',
+          })) || [],
+          updates: updates?.map((u: any, index: number) => ({
+            id: index + 1,
+            date: new Date(u.created_at).toISOString().split('T')[0],
+            title: u.title,
+            content: u.content,
+          })) || [],
+          isLiked: false, // Would need to check against current user
+          commentsCount: 0, // Would need to count comments
+        };
+        
+        setProjectData(formattedProject);
+      } catch (err) {
+        console.error('Error fetching project data:', err);
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchProjectData();
+  }, [params.id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading project...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !projectData) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="max-w-md mx-auto">
+          <CardHeader>
+            <CardTitle>Error Loading Project</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">{error || 'Project not found'}</p>
+            <Button asChild className="mt-4">
+              <Link href="/">Return Home</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const progressPercentage = (projectData.fundTotal / projectData.fundGoal) * 100
 
@@ -173,7 +307,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
                 </div>
               </div>
 
-              <Progress value={progressPercentage} className="h-3" />
+              <Progress value={Math.min(progressPercentage, 100)} className="h-3" />
 
               <div className="flex justify-between text-sm">
                 <div className="flex items-center gap-1">
@@ -216,7 +350,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
               </CardHeader>
               <CardContent>
                 <div className="prose prose-sm max-w-none">
-                  {projectData.description.split("\n").map((paragraph, index) => (
+                  {(projectData.description || '').split("\n").map((paragraph, index) => (
                     <p key={index} className="mb-3 text-sm leading-relaxed">
                       {paragraph}
                     </p>
@@ -281,7 +415,15 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       </div>
 
       {/* Donation Panel */}
-      {showDonationPanel && <DonationPanel project={projectData} onClose={() => setShowDonationPanel(false)} />}
+      {showDonationPanel && <DonationPanel 
+        project={{
+          id: parseInt(projectData.id) || 0,
+          title: projectData.title,
+          fundGoal: projectData.fundGoal,
+          fundTotal: projectData.fundTotal
+        }} 
+        onClose={() => setShowDonationPanel(false)} 
+      />}
     </div>
   )
 }
