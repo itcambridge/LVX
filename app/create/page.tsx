@@ -60,6 +60,7 @@ interface Role {
 export default function CreateProjectPage() {
   const [step, setStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [formData, setFormData] = useState({
     title: "",
@@ -182,6 +183,64 @@ export default function CreateProjectPage() {
   const removeRole = (id: string) => {
     setRoles(roles.filter((r) => r.id !== id))
   }
+
+const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+  
+  setIsUploading(true);
+  
+  try {
+    const uploadedUrls: string[] = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      const filePath = `project-images/${fileName}`;
+      
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('projects')
+        .upload(filePath, file);
+      
+      if (uploadError) {
+        console.error("Error uploading image:", uploadError);
+        continue;
+      }
+      
+      // Get the public URL
+      const { data } = supabase.storage
+        .from('projects')
+        .getPublicUrl(filePath);
+      
+      if (data?.publicUrl) {
+        uploadedUrls.push(data.publicUrl);
+      }
+    }
+    
+    // Update form data with new images
+    setFormData(prev => ({
+      ...prev,
+      images: [...prev.images, ...uploadedUrls]
+    }));
+    
+    // Clear the input
+    e.target.value = '';
+    
+  } catch (error) {
+    console.error("Error handling image upload:", error);
+  } finally {
+    setIsUploading(false);
+  }
+};
+
+const removeImage = (index: number) => {
+  setFormData(prev => ({
+    ...prev,
+    images: prev.images.filter((_, i) => i !== index)
+  }));
+};
 
 const handleSubmit = async () => {
   try {
@@ -312,9 +371,24 @@ const handleSubmit = async () => {
       }
     }
     
-    // 5. Handle project images (if implemented)
-    // This would typically involve uploading images to storage and then
-    // inserting records into the project_images table
+    // 5. Handle project images
+    if (formData.images.length > 0) {
+      const projectImagesData = formData.images.map((imageUrl, index) => ({
+        project_id: projectId,
+        url: imageUrl,
+        position: index,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+      
+      const { error: imagesError } = await supabase
+        .from('project_images')
+        .insert(projectImagesData);
+      
+      if (imagesError) {
+        console.error("Error saving project images:", imagesError);
+      }
+    }
     
     // Success! Redirect to the project page or home page
     window.location.href = `/project/${projectId}`;
@@ -548,9 +622,49 @@ const getEndDate = (duration: string): string | null => {
                 <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mb-2">Upload project images</p>
-                  <Button variant="outline" size="sm">
-                    Choose Files
-                  </Button>
+                  <div className="flex flex-col items-center gap-2">
+                    <input
+                      type="file"
+                      id="image-upload"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => document.getElementById('image-upload')?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? "Uploading..." : "Choose Files"}
+                    </Button>
+                    
+                    {formData.images.length > 0 && (
+                      <div className="mt-4 w-full">
+                        <p className="text-sm font-medium mb-2">Selected Images ({formData.images.length})</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {formData.images.map((image, index) => (
+                            <div key={index} className="relative group">
+                              <img 
+                                src={image} 
+                                alt={`Project image ${index + 1}`} 
+                                className="w-full h-16 object-cover rounded-md"
+                              />
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => removeImage(index)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
