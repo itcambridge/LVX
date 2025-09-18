@@ -353,17 +353,6 @@ export default function HomePage() {
           </div>
         )}
       </div>
-
-      {/* Call to Action */}
-      <Card className="bg-accent text-accent-foreground">
-        <CardContent className="text-center py-6">
-          <h3 className="font-bold mb-2">Ready to Make Change?</h3>
-          <p className="text-sm mb-4 text-accent-foreground/90">Start your own project and rally your community</p>
-          <Button variant="secondary" className="bg-background text-foreground hover:bg-background/90">
-            Create Project
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   )
 }
