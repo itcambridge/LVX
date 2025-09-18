@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description:
     "A global social platform where people can propose initiatives, donate, connect skills, and reward contributors.",
   manifest: "/manifest.json",
-  themeColor: "#E10600",
+  themeColor: "#FF0000",
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
     generator: 'v0.app'
 }

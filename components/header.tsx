@@ -10,7 +10,7 @@ export function Header() {
           <Button variant="ghost" size="icon" className="md:hidden">
             <Menu className="h-5 w-5" />
           </Button>
-          <Image src="/logo.png" alt="FreeSpeech.Live" width={120} height={40} className="h-8 w-auto" />
+          <Image src="/logo.png" alt="FreeSpeech.Live" width={150} height={40} className="h-9 w-auto" />
         </div>
         <Button variant="ghost" size="icon">
           <Bell className="h-5 w-5" />
