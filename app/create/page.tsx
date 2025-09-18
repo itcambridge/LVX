@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -58,6 +59,8 @@ interface Role {
 
 export default function CreateProjectPage() {
   const [step, setStep] = useState(1)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState("")
   const [formData, setFormData] = useState({
     title: "",
     summary: "",
@@ -180,12 +183,213 @@ export default function CreateProjectPage() {
     setRoles(roles.filter((r) => r.id !== id))
   }
 
-  const handleSubmit = () => {
-    // Mock project creation - in real app would save to database
-    console.log("Creating project:", { formData, milestones, roles })
-    // Redirect to project page or success page
-    window.location.href = "/"
+const handleSubmit = async () => {
+  try {
+    // Show loading state
+    setIsSubmitting(true);
+    
+    console.log("Creating project:", { formData, milestones, roles });
+    
+    // 1. Insert the project into the projects table
+    const { data: projectData, error: projectError } = await supabase
+      .from('projects')
+      .insert({
+        title: formData.title,
+        summary: formData.summary,
+        description: formData.description,
+        category_id: await getCategoryId(formData.category),
+        fund_goal: parseFloat(formData.fundingGoal) || 0,
+        fund_total: 0, // Starting with 0 funds
+        supporters: 0, // Starting with 0 supporters
+        location: formData.location,
+        start_date: new Date().toISOString(),
+        end_date: getEndDate(formData.duration),
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select('id')
+      .single();
+    
+    if (projectError) {
+      throw new Error(`Error creating project: ${projectError.message}`);
+    }
+    
+    const projectId = projectData.id;
+    console.log("Project created with ID:", projectId);
+    
+    // 2. Insert milestones
+    if (milestones.length > 0) {
+      const milestonesData = milestones.map((milestone, index) => ({
+        project_id: projectId,
+        title: milestone.title,
+        description: milestone.description,
+        target_date: milestone.targetDate || null,
+        budget: parseFloat(milestone.budget) || null,
+        completed: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+      
+      const { error: milestonesError } = await supabase
+        .from('project_milestones')
+        .insert(milestonesData);
+      
+      if (milestonesError) {
+        console.error("Error creating milestones:", milestonesError);
+      }
+    }
+    
+    // 3. Insert roles
+    if (roles.length > 0) {
+      const rolesData = roles.map((role) => ({
+        project_id: projectId,
+        title: role.title,
+        description: role.description,
+        time_commitment: role.timeCommitment,
+        filled: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+      
+      const { data: rolesInsertData, error: rolesError } = await supabase
+        .from('roles')
+        .insert(rolesData)
+        .select('id');
+      
+      if (rolesError) {
+        console.error("Error creating roles:", rolesError);
+      } else if (rolesInsertData) {
+        // 4. Insert role skills
+        for (let i = 0; i < roles.length; i++) {
+          if (roles[i].skills.length > 0 && rolesInsertData[i]) {
+            const roleId = rolesInsertData[i].id;
+            
+            // For each skill, first ensure it exists in the skills table
+            for (const skillName of roles[i].skills) {
+              // Check if skill exists
+              const { data: existingSkill } = await supabase
+                .from('skills')
+                .select('id')
+                .eq('name', skillName)
+                .single();
+              
+              let skillId;
+              
+              if (!existingSkill) {
+                // Create the skill
+                const { data: newSkill, error: skillError } = await supabase
+                  .from('skills')
+                  .insert({ name: skillName, created_at: new Date().toISOString() })
+                  .select('id')
+                  .single();
+                
+                if (skillError) {
+                  console.error(`Error creating skill ${skillName}:`, skillError);
+                  continue;
+                }
+                
+                skillId = newSkill.id;
+              } else {
+                skillId = existingSkill.id;
+              }
+              
+              // Link skill to role
+              const { error: roleSkillError } = await supabase
+                .from('role_skills')
+                .insert({
+                  role_id: roleId,
+                  skill_id: skillId,
+                  created_at: new Date().toISOString()
+                });
+              
+              if (roleSkillError) {
+                console.error(`Error linking skill ${skillName} to role:`, roleSkillError);
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // 5. Handle project images (if implemented)
+    // This would typically involve uploading images to storage and then
+    // inserting records into the project_images table
+    
+    // Success! Redirect to the project page or home page
+    window.location.href = `/project/${projectId}`;
+    
+  } catch (error) {
+    console.error("Error submitting project:", error);
+    setSubmitError("Failed to create project. Please try again.");
+  } finally {
+    setIsSubmitting(false);
   }
+};
+
+// Helper function to get or create a category ID
+const getCategoryId = async (categoryName: string): Promise<string | null> => {
+  if (!categoryName) return null;
+  
+  // Check if category exists
+  const { data: existingCategory } = await supabase
+    .from('categories')
+    .select('id')
+    .eq('name', categoryName)
+    .single();
+  
+  if (existingCategory) {
+    return existingCategory.id;
+  }
+  
+  // Create new category
+  const { data: newCategory, error } = await supabase
+    .from('categories')
+    .insert({ 
+      name: categoryName, 
+      count: 1,
+      created_at: new Date().toISOString() 
+    })
+    .select('id')
+    .single();
+  
+  if (error) {
+    console.error("Error creating category:", error);
+    return null;
+  }
+  
+  return newCategory.id;
+};
+
+// Helper function to calculate end date from duration string
+const getEndDate = (duration: string): string | null => {
+  if (!duration) return null;
+  
+  const now = new Date();
+  
+  // Try to parse the duration (e.g., "3 months", "2 weeks", "1 year")
+  const match = duration.match(/(\d+)\s*(day|days|week|weeks|month|months|year|years)/i);
+  
+  if (match) {
+    const amount = parseInt(match[1]);
+    const unit = match[2].toLowerCase();
+    
+    if (unit.startsWith('day')) {
+      now.setDate(now.getDate() + amount);
+    } else if (unit.startsWith('week')) {
+      now.setDate(now.getDate() + (amount * 7));
+    } else if (unit.startsWith('month')) {
+      now.setMonth(now.getMonth() + amount);
+    } else if (unit.startsWith('year')) {
+      now.setFullYear(now.getFullYear() + amount);
+    }
+  } else {
+    // Default to 3 months if we can't parse
+    now.setMonth(now.getMonth() + 3);
+  }
+  
+  return now.toISOString();
+};
 
   return (
     <div className="min-h-screen bg-background">
@@ -563,14 +767,26 @@ export default function CreateProjectPage() {
                   </div>
                 </div>
 
+              <div className="space-y-2">
+                {submitError && (
+                  <div className="text-red-500 text-sm p-2 bg-red-50 rounded border border-red-200">
+                    {submitError}
+                  </div>
+                )}
+                
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={handleBack} className="flex-1 bg-transparent">
+                  <Button variant="outline" onClick={handleBack} className="flex-1 bg-transparent" disabled={isSubmitting}>
                     Back
                   </Button>
-                  <Button onClick={handleSubmit} className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground">
-                    Launch Project
+                  <Button 
+                    onClick={handleSubmit} 
+                    className="flex-1 bg-accent hover:bg-accent/90 text-accent-foreground"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Creating Project..." : "Launch Project"}
                   </Button>
                 </div>
+              </div>
               </CardContent>
             </Card>
           </div>
