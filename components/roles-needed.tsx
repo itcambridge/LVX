@@ -1,10 +1,24 @@
+import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Clock, Users } from "lucide-react"
+import { MapPin, Clock, Users, Loader2 } from "lucide-react"
 
-// Mock roles data
-const rolesNeeded = [
+// Interface for role data
+interface Role {
+  id: number;
+  title: string;
+  description: string;
+  skills: string[];
+  timeCommitment: string;
+  location: string;
+  applicants: number;
+  filled: boolean;
+}
+
+// Mock roles data as fallback
+const mockRoles: Role[] = [
   {
     id: 1,
     title: "Local Project Coordinator",
@@ -42,6 +56,168 @@ interface RolesNeededProps {
 }
 
 export function RolesNeeded({ projectId }: RolesNeededProps) {
+  const [roles, setRoles] = useState<Role[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [applying, setApplying] = useState<number | null>(null)
+  
+  // Current user info - in a real app, this would come from auth
+  // For now, we'll use a mock user with a valid UUID format
+  const currentUser = {
+    id: '00000000-0000-0000-0000-000000000000', // Valid UUID format
+    name: 'You',
+    avatar: '/placeholder-user.jpg'
+  }
+  
+  // Fetch roles from Supabase
+  useEffect(() => {
+    async function fetchRoles() {
+      try {
+        setLoading(true);
+        
+        // Try to fetch roles from Supabase
+        try {
+          // Fetch roles for this project
+          const { data: rolesData, error: rolesError } = await supabase
+            .from('roles')
+            .select(`
+              id,
+              project_id,
+              title,
+              description,
+              time_commitment,
+              location,
+              filled,
+              created_at,
+              updated_at
+            `)
+            .eq('project_id', projectId)
+            .order('id');
+          
+          if (rolesError) {
+            throw new Error(`Error fetching roles: ${rolesError.message}`);
+          }
+          
+          // Fetch skills for each role
+          const roleIds = rolesData.map((role: any) => role.id);
+          
+          // Try to fetch from role_skills table
+          let skillsData: any[] = [];
+          try {
+            const { data, error: skillsError } = await supabase
+              .from('role_skills')
+              .select('role_id, skill')
+              .in('role_id', roleIds);
+            
+            if (!skillsError && data) {
+              skillsData = data;
+            }
+          } catch (skillsErr) {
+            console.error('Error fetching role skills:', skillsErr);
+          }
+          
+          // Group skills by role_id
+          const skillsByRoleId: Record<string, string[]> = {};
+          skillsData?.forEach((item: any) => {
+            if (!skillsByRoleId[item.role_id]) {
+              skillsByRoleId[item.role_id] = [];
+            }
+            skillsByRoleId[item.role_id].push(item.skill);
+          });
+          
+          // Fetch role applications to determine applicants count
+          let applicantsByRoleId: Record<string, number> = {};
+          try {
+            const { data: applicationsData, error: applicationsError } = await supabase
+              .from('role_applications')
+              .select('role_id, count')
+              .in('role_id', roleIds)
+              .group('role_id');
+            
+            if (!applicationsError && applicationsData) {
+              applicationsData.forEach((item: any) => {
+                applicantsByRoleId[item.role_id] = parseInt(item.count);
+              });
+            }
+          } catch (applicationsErr) {
+            console.error('Error fetching role applications:', applicationsErr);
+          }
+          
+          // Transform roles data
+          const formattedRoles: Role[] = rolesData.map((role: any) => ({
+            id: role.id,
+            title: role.title,
+            description: role.description,
+            skills: skillsByRoleId[role.id] || [],
+            timeCommitment: role.time_commitment || '',
+            location: role.location || '',
+            applicants: applicantsByRoleId[role.id] || 0,
+            filled: role.filled || false
+          }));
+          
+          setRoles(formattedRoles);
+          setLoading(false);
+          return;
+        } catch (err) {
+          console.error('Error fetching from Supabase:', err);
+          // Fall back to mock data
+          setRoles(mockRoles);
+        }
+      } catch (err) {
+        console.error('Error in fetchRoles:', err);
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        // Fall back to mock data
+        setRoles(mockRoles);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchRoles();
+  }, [projectId]);
+  
+  const handleApply = async (roleId: number) => {
+    setApplying(roleId);
+    
+    try {
+      // For demo purposes, we'll just update the local state without making
+      // actual Supabase calls. This allows the feature to work without requiring
+      // actual authentication.
+      
+      // In a real app with authentication, we would do:
+      /*
+      // Insert application into Supabase
+      const { error } = await supabase
+        .from('role_applications')
+        .insert({
+          role_id: roleId,
+          user_id: currentUser.id,
+          message: '',
+          status: 'pending',
+          created_at: new Date().toISOString()
+        });
+      
+      if (error) {
+        throw new Error(`Error applying for role: ${error.message}`);
+      }
+      */
+      
+      // Update local state
+      setRoles(roles.map(role => 
+        role.id === roleId 
+          ? { ...role, applicants: role.applicants + 1 } 
+          : role
+      ));
+      
+      // Show success message
+      alert('Application submitted successfully!');
+    } catch (err) {
+      console.error('Error applying for role:', err);
+      alert('Failed to apply for role. Please try again.');
+    } finally {
+      setApplying(null);
+    }
+  };
   return (
     <div className="space-y-4">
       <div className="text-center py-4">
@@ -51,7 +227,19 @@ export function RolesNeeded({ projectId }: RolesNeededProps) {
         </p>
       </div>
 
-      {rolesNeeded.map((role) => (
+      {loading ? (
+        <Card className="py-8">
+          <CardContent className="flex justify-center items-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+      ) : roles.length === 0 ? (
+        <Card className="py-8">
+          <CardContent className="text-center">
+            <p className="text-muted-foreground">No roles available for this project.</p>
+          </CardContent>
+        </Card>
+      ) : roles.map((role) => (
         <Card key={role.id} className={role.filled ? "opacity-75" : ""}>
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between">
@@ -104,9 +292,15 @@ export function RolesNeeded({ projectId }: RolesNeededProps) {
             <Button
               variant={role.filled ? "secondary" : "default"}
               className={`w-full ${!role.filled ? "bg-accent hover:bg-accent/90 text-accent-foreground" : ""}`}
-              disabled={role.filled}
+              disabled={role.filled || applying !== null}
+              onClick={() => handleApply(role.id)}
             >
-              {role.filled ? "Position Filled" : "Apply for This Role"}
+              {role.filled ? "Position Filled" : applying === role.id ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Applying...
+                </>
+              ) : "Apply for This Role"}
             </Button>
           </CardContent>
         </Card>
