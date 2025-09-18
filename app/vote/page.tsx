@@ -283,8 +283,8 @@ export default function VotePage() {
           <p className="text-sm text-muted-foreground mb-4">
             Community members can propose new polls for platform improvements and policy changes.
           </p>
-          <Button variant="outline" className="bg-transparent">
-            Submit Proposal
+          <Button variant="outline" className="bg-transparent" asChild>
+            <a href="/vote/submit">Submit Proposal</a>
           </Button>
         </CardContent>
       </Card>
