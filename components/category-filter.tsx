@@ -33,37 +33,7 @@ export function CategoryFilter({ selectedCategory, onCategoryChange }: CategoryF
   useEffect(() => {
     async function fetchCategories() {
       try {
-        // First try to get categories with count
-        try {
-          const { data, error } = await supabase
-            .from('categories')
-            .select('id, name, count')
-            .order('count', { ascending: false });
-
-          if (error) {
-            throw error;
-          }
-
-          // Transform the data to match our Category interface
-          const transformedCategories = data.map((category: any) => ({
-            id: category.name.toLowerCase(),
-            label: category.name,
-            count: category.count || 0
-          }));
-
-          // Update the "All Projects" count to be the sum of all other categories
-          const totalCount = transformedCategories.reduce((sum: number, category: Category) => sum + category.count, 0);
-          const allWithCount = { ...ALL_CATEGORY, count: totalCount };
-
-          // Set the categories with "All Projects" at the beginning
-          setCategories([allWithCount, ...transformedCategories]);
-          return;
-        } catch (categoryError) {
-          console.error('Error fetching categories with count:', categoryError);
-          console.log('Falling back to fetching categories without count');
-        }
-
-        // Fallback: Just get categories without count
+        // Get categories without count to reduce Supabase calls
         const { data, error } = await supabase
           .from('categories')
           .select('id, name');
@@ -77,7 +47,7 @@ export function CategoryFilter({ selectedCategory, onCategoryChange }: CategoryF
         const transformedCategories = data.map((category: any) => ({
           id: category.name.toLowerCase(),
           label: category.name,
-          count: 0 // Default count
+          count: 0 // We keep the count property for interface compatibility but don't use it
         }));
 
         // Set the categories with "All Projects" at the beginning
@@ -178,7 +148,6 @@ export function CategoryFilter({ selectedCategory, onCategoryChange }: CategoryF
             onClick={() => onCategoryChange(category.id)}
           >
             {category.label}
-            <span className="ml-1 text-xs opacity-75">({category.count})</span>
           </Badge>
         ))}
       </div>
