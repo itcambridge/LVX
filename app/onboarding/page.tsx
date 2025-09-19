@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ArrowRight, Upload, X } from "lucide-react"
 import Image from "next/image"
+import { supabaseBrowser } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
 
 const SUGGESTED_SKILLS = [
   "Community Organizing",
@@ -34,11 +36,46 @@ export default function OnboardingPage() {
     skills: [] as string[],
     avatar: "",
   })
+  const [loading, setLoading] = useState(false)
+  const supabase = supabaseBrowser()
+  const router = useRouter()
+  
+  // Check if user is already authenticated
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data } = await supabase.auth.getUser()
+      if (data.user) {
+        // If user is authenticated, move to step 2
+        setStep(2)
+        // Pre-fill name if available
+        if (data.user.user_metadata?.name) {
+          setFormData(prev => ({ 
+            ...prev, 
+            name: data.user.user_metadata.name as string,
+            avatar: data.user.user_metadata.avatar_url as string || ""
+          }))
+        }
+      }
+    }
+    
+    checkUser()
+  }, [])
 
-  const handleSocialLogin = (provider: string) => {
-    // Mock social login - in real app would integrate with auth provider
-    console.log(`Logging in with ${provider}`)
-    setStep(2)
+  const callbackUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/auth/callback`
+    : "/auth/callback"
+
+  const handleSocialLogin = async (provider: string) => {
+    setLoading(true)
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: provider.toLowerCase() as any,
+        options: { redirectTo: callbackUrl }
+      })
+    } catch (error) {
+      console.error(`Error signing in with ${provider}:`, error)
+      setLoading(false)
+    }
   }
 
   const handleSkillToggle = (skill: string) => {
@@ -48,10 +85,37 @@ export default function OnboardingPage() {
     }))
   }
 
-  const handleComplete = () => {
-    // Mock completion - in real app would save to database
-    console.log("Onboarding complete:", formData)
-    window.location.href = "/"
+  const handleComplete = async () => {
+    setLoading(true)
+    try {
+      // Get current user
+      const { data } = await supabase.auth.getUser()
+      if (!data.user) {
+        throw new Error("User not authenticated")
+      }
+      
+      // Update profile in database
+      const response = await fetch("/api/me/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: formData.name,
+          bio: formData.bio,
+          skills: formData.skills,
+          avatarUrl: formData.avatar
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error("Failed to update profile")
+      }
+      
+      // Redirect to home page
+      router.push("/")
+    } catch (error) {
+      console.error("Error completing onboarding:", error)
+      setLoading(false)
+    }
   }
 
   if (step === 1) {
@@ -75,32 +139,36 @@ export default function OnboardingPage() {
                 onClick={() => handleSocialLogin("google")}
                 variant="outline"
                 className="w-full justify-start gap-3 h-12"
+                disabled={loading}
               >
                 <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
                   G
                 </div>
-                Continue with Google
+                {loading ? "Connecting..." : "Continue with Google"}
               </Button>
 
-              <Button
+              {/* Facebook and Apple authentication can be added later */}
+              {/* <Button
                 onClick={() => handleSocialLogin("facebook")}
                 variant="outline"
                 className="w-full justify-start gap-3 h-12"
+                disabled
               >
                 <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
                   f
                 </div>
-                Continue with Facebook
+                Continue with Facebook (Coming Soon)
               </Button>
 
               <Button
                 onClick={() => handleSocialLogin("apple")}
                 variant="outline"
                 className="w-full justify-start gap-3 h-12"
+                disabled
               >
                 <div className="w-5 h-5 bg-black rounded-full flex items-center justify-center text-white text-xs font-bold"></div>
-                Continue with Apple
-              </Button>
+                Continue with Apple (Coming Soon)
+              </Button> */}
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
@@ -115,8 +183,9 @@ export default function OnboardingPage() {
                 onClick={() => setStep(2)}
                 variant="ghost"
                 className="w-full text-muted-foreground hover:text-foreground"
+                disabled={loading}
               >
-                Connect Wallet Later
+                {loading ? "Please wait..." : "Continue without signing in"}
               </Button>
             </CardContent>
           </Card>
@@ -250,12 +319,21 @@ export default function OnboardingPage() {
               )}
 
               <div className="pt-4 space-y-3">
-                <Button onClick={handleComplete} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
-                  Join the Movement
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                <Button 
+                  onClick={handleComplete} 
+                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
+                  disabled={loading}
+                >
+                  {loading ? "Saving..." : "Join the Movement"}
+                  {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
                 </Button>
-                <Button onClick={handleComplete} variant="ghost" className="w-full">
-                  Skip for Now
+                <Button 
+                  onClick={handleComplete} 
+                  variant="ghost" 
+                  className="w-full"
+                  disabled={loading}
+                >
+                  {loading ? "Saving..." : "Skip for Now"}
                 </Button>
               </div>
             </CardContent>
