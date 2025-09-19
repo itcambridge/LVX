@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { supabaseBrowser } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -38,6 +38,36 @@ export default function SubmitProposalPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [userName, setUserName] = useState("")
+  const supabase = supabaseBrowser()
+
+  // Check if user is authenticated
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data } = await supabase.auth.getUser()
+        setIsAuthenticated(!!data.user)
+        
+        if (data.user) {
+          // Get user profile
+          const { data: userData, error } = await supabase
+            .from('users')
+            .select('name')
+            .eq('id', data.user.id)
+            .single()
+          
+          if (!error && userData) {
+            setUserName(userData.name)
+          }
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error)
+      }
+    }
+    
+    checkAuth()
+  }, [supabase])
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -108,56 +138,63 @@ export default function SubmitProposalPage() {
       return
     }
 
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      router.push('/login')
+      return
+    }
+
     setIsSubmitting(true)
     setSubmitError("")
 
     try {
-      // In a real app, we would save to Supabase here
-      // For now, we'll just simulate a successful submission
-      console.log("Submitting proposal:", {
-        ...formData,
-        votingOptions: validOptions.map(option => option.text),
-      })
+      // Get current user
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData.user) {
+        router.push('/login')
+        return
+      }
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Calculate end date based on duration
+      const now = new Date()
+      const endDate = new Date(now)
+      endDate.setDate(now.getDate() + parseInt(formData.duration))
 
-      // In a real implementation, we would do something like:
-      /*
-      const { data, error } = await supabase
-        .from('proposals')
+      // Create poll in Supabase
+      const { data: pollData, error: pollError } = await supabase
+        .from('polls')
         .insert({
           title: formData.title,
           description: formData.description,
           type: formData.type,
-          duration_days: parseInt(formData.duration),
-          status: 'pending',
-          created_at: new Date().toISOString(),
-          user_id: 'current-user-id', // Would come from auth
+          creator_id: userData.user.id,
+          featured: false,
+          start_date: now.toISOString(),
+          end_date: endDate.toISOString(),
+          created_at: now.toISOString(),
+          updated_at: now.toISOString()
         })
         .select('id')
-        .single();
+        .single()
 
-      if (error) {
-        throw new Error(`Error creating proposal: ${error.message}`);
+      if (pollError) {
+        throw new Error(`Error creating poll: ${pollError.message}`)
       }
 
-      // Save voting options
-      const proposalId = data.id;
-      const optionsData = validOptions.map((option, index) => ({
-        proposal_id: proposalId,
-        text: option.text,
-        display_order: index,
-      }));
+      // Save poll options
+      const pollId = pollData.id
+      const optionsData = validOptions.map(option => ({
+        poll_id: pollId,
+        text: option.text
+      }))
 
       const { error: optionsError } = await supabase
-        .from('proposal_options')
-        .insert(optionsData);
+        .from('poll_options')
+        .insert(optionsData)
 
       if (optionsError) {
-        throw new Error(`Error saving voting options: ${optionsError.message}`);
+        throw new Error(`Error saving poll options: ${optionsError.message}`)
       }
-      */
 
       setSubmitSuccess(true)
       
@@ -342,7 +379,7 @@ export default function SubmitProposalPage() {
                   <div className="flex items-start gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium">Your Name</span>
+                        <span className="text-sm font-medium">{userName || "Your Name"}</span>
                         {formData.type && (
                           <Badge className={`text-xs ${getTypeColor(formData.type)}`}>{formData.type}</Badge>
                         )}
