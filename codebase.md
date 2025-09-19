@@ -26,7 +26,7 @@ The application follows a modern web architecture with a focus on mobile-first d
 The platform provides a comprehensive project discovery experience through:
 
 - **Home Feed**: A curated list of trending projects with filtering capabilities
-- **Category Filtering**: Projects can be filtered by categories like Environment, Education, Community, Healthcare, etc.
+- **Category Filtering**: Projects can be filtered by categories like Free Speech, Immigration, Culture, Technology, Law, Politics, and Protest.
 - **Search Functionality**: Users can search for projects by title or description
 - **Project Cards**: Each project is displayed as a card with key information including:
   - Project title and summary
@@ -121,9 +121,11 @@ The platform includes a democratic governance system:
 - **Voting Options**: Multiple choice voting with real-time results
 - **Results Display**: Visual representation of voting results with progress bars
 - **Completed Polls**: Archive of past polls with results
+- **Proposal Submission**: Users can submit new proposals for community voting with customizable voting options, duration settings, and proposal types
 
 Implementation files:
 - `app/vote/page.tsx`: Voting page with active and completed polls
+- `app/vote/submit/page.tsx`: Proposal submission page with form validation and preview
 
 ### 7. User Profiles
 
@@ -147,11 +149,37 @@ The application features a mobile-first navigation system:
 - **Bottom Navigation**: Mobile-friendly navigation with Home, Create, Vote, and Profile tabs
 - **Responsive Layout**: Adapts to different screen sizes with a focus on mobile experience
 - **Theme Support**: Light and dark mode support
+- **Header Component**: Top navigation bar with logo and notification bell
 
 Implementation files:
 - `components/bottom-nav.tsx`: Bottom navigation component
+- `components/header.tsx`: Header component with logo and notifications
 - `components/theme-provider.tsx`: Theme provider for light/dark mode
 - `app/layout.tsx`: Main layout component
+
+### 9. Admin Dashboard
+
+The platform includes an administrative interface for platform management:
+
+- **Project Management**: View, filter, and delete projects
+- **Database Management**: Links to Supabase dashboard for advanced operations
+- **Deletion Workflow**: Comprehensive deletion process that removes all related project data
+- **Confirmation Dialogs**: Safety measures to prevent accidental deletions
+
+Implementation files:
+- `app/admin/page.tsx`: Admin dashboard interface
+
+### 10. User Onboarding
+
+The platform features a multi-step onboarding process for new users:
+
+- **Authentication Options**: Social login options (Google, Facebook, Apple)
+- **Profile Setup**: User information collection including name, bio, and avatar
+- **Skills Selection**: Interface for users to select their skills and interests
+- **Progressive Disclosure**: Step-by-step flow to avoid overwhelming new users
+
+Implementation files:
+- `app/onboarding/page.tsx`: Multi-step onboarding process
 
 ## Component Structure
 
@@ -223,13 +251,14 @@ To test the LVX application, follow these steps:
 
 1. **Project Discovery**:
    - Browse the home page to see project listings
-   - Test the category filters
+   - Test the category filters with the new Free Speech categories
    - Use the search functionality to find specific projects
 
 2. **Project Creation**:
    - Navigate to the Create page via the bottom navigation
    - Go through the multi-step wizard to create a new project
    - Test the AI suggestion features
+   - Verify the new categories are available in the dropdown
 
 3. **Project Details**:
    - Click on a project card to view its details
@@ -240,10 +269,22 @@ To test the LVX application, follow these steps:
    - Navigate to the Vote page
    - Test voting on different polls
    - View completed polls and their results
+   - Try submitting a new proposal through the submission page
 
 5. **User Profile**:
    - Visit the Profile page
    - Test the different tabs (Overview, Projects, Activity)
+
+6. **Admin Dashboard**:
+   - Access the admin dashboard
+   - Test project filtering and sorting
+   - Verify the project deletion workflow (with caution)
+   - Test the database management links
+
+7. **Onboarding Process**:
+   - Test the social login options
+   - Go through the profile setup process
+   - Test the skills selection interface
 
 ### Testing Across Devices
 
