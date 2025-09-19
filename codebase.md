@@ -171,15 +171,18 @@ Implementation files:
 
 ### 10. User Onboarding
 
-The platform features a multi-step onboarding process for new users:
+The platform includes a multi-step onboarding process for new users:
 
-- **Authentication Options**: Social login options (Google, Facebook, Apple)
+- **Authentication Options**: Social login options (Google, Facebook, Apple) with mock implementations
 - **Profile Setup**: User information collection including name, bio, and avatar
 - **Skills Selection**: Interface for users to select their skills and interests
 - **Progressive Disclosure**: Step-by-step flow to avoid overwhelming new users
+- **Accessibility**: Available via the user icon in the header on all pages
+
+The onboarding process is currently implemented with mock authentication that will be replaced with real authentication in future updates.
 
 Implementation files:
-- `app/onboarding/page.tsx`: Multi-step onboarding process
+- `app/onboarding/page.tsx`: Multi-step onboarding process with mock authentication
 
 ## Component Structure
 
@@ -282,7 +285,8 @@ To test the LVX application, follow these steps:
    - Test the database management links
 
 7. **Onboarding Process**:
-   - Test the social login options
+   - Click the user icon in the header to access the onboarding page
+   - Test the social login options (mock implementations)
    - Go through the profile setup process
    - Test the skills selection interface
 

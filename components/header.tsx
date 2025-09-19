@@ -1,6 +1,7 @@
 import Image from "next/image"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Bell, Menu } from "lucide-react"
+import { Bell, Menu, User } from "lucide-react"
 
 export function Header() {
   return (
@@ -12,9 +13,16 @@ export function Header() {
           </Button>
           <Image src="/logo.png" alt="FreeSpeech.Live" width={150} height={40} className="h-9 w-auto" />
         </div>
-        <Button variant="ghost" size="icon" className="text-white hover:bg-black/20">
-          <Bell className="h-5 w-5" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/onboarding">
+            <Button variant="ghost" size="icon" className="text-white hover:bg-black/20">
+              <User className="h-5 w-5" />
+            </Button>
+          </Link>
+          <Button variant="ghost" size="icon" className="text-white hover:bg-black/20">
+            <Bell className="h-5 w-5" />
+          </Button>
+        </div>
       </div>
     </header>
   )
