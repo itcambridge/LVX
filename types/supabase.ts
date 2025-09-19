@@ -9,6 +9,87 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      polls: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          type: string
+          creator_id: string | null
+          featured: boolean
+          start_date: string
+          end_date: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          description?: string | null
+          type: string
+          creator_id?: string | null
+          featured?: boolean
+          start_date?: string
+          end_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string | null
+          type?: string
+          creator_id?: string | null
+          featured?: boolean
+          start_date?: string
+          end_date?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      poll_options: {
+        Row: {
+          id: string
+          poll_id: string
+          text: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          poll_id: string
+          text: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          poll_id?: string
+          text?: string
+          created_at?: string
+        }
+      }
+      poll_votes: {
+        Row: {
+          id: string
+          poll_id: string
+          option_id: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          poll_id: string
+          option_id: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          poll_id?: string
+          option_id?: string
+          user_id?: string
+          created_at?: string
+        }
+      }
       categories: {
         Row: {
           id: string
