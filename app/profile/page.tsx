@@ -440,172 +440,55 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="projects">Projects</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
-        </TabsList>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <TrendingUp className="h-4 w-4 text-accent" />
+              <span className="text-2xl font-bold">{userData.stats.projectsCreated}</span>
+            </div>
+            <div className="text-xs text-muted-foreground">Projects Created</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 text-center">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Heart className="h-4 w-4 text-accent" />
+              <span className="text-2xl font-bold">{userData.stats.projectsSupported}</span>
+            </div>
+            <div className="text-xs text-muted-foreground">Projects Supported</div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <TabsContent value="overview" className="space-y-4">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <CardContent className="pt-4 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <TrendingUp className="h-4 w-4 text-accent" />
-                  <span className="text-2xl font-bold">{userData.stats.projectsCreated}</span>
-                </div>
-                <div className="text-xs text-muted-foreground">Projects Created</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-4 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Heart className="h-4 w-4 text-accent" />
-                  <span className="text-2xl font-bold">{userData.stats.projectsSupported}</span>
-                </div>
-                <div className="text-xs text-muted-foreground">Projects Supported</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-accent rounded-full shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm">Donated $100 to Digital Literacy for Seniors</p>
-                  <p className="text-xs text-muted-foreground">2 hours ago</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-accent rounded-full shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm">Updated Clean Water project milestone</p>
-                  <p className="text-xs text-muted-foreground">1 day ago</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-muted rounded-full shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm">Applied for Community Coordinator role</p>
-                  <p className="text-xs text-muted-foreground">3 days ago</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="projects" className="space-y-4">
-          {/* My Projects */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">My Projects ({myProjects.length})</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {myProjects.map((project) => (
-                <div key={project.id} className="border rounded-lg p-3">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-medium text-sm line-clamp-1">{project.title}</h4>
-                    <Badge className={`text-xs ${getStatusColor(project.status)}`}>{project.status}</Badge>
-                  </div>
-                  {project.status === "Active" && (
-                    <div className="space-y-2">
-                      <Progress value={(project.fundTotal / project.fundGoal) * 100} className="h-2" />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>${project.fundTotal.toLocaleString()} raised</span>
-                        <span>{project.daysLeft} days left</span>
-                      </div>
-                    </div>
-                  )}
-                  {project.status === "Completed" && (
-                    <div className="text-xs text-muted-foreground">
-                      Successfully funded • {project.supporters} supporters
-                    </div>
-                  )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Supported Projects */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Supported Projects ({supportedProjects.length})</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {supportedProjects.map((project) => (
-                <div key={project.id} className="border rounded-lg p-3">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-medium text-sm line-clamp-1">{project.title}</h4>
-                    <div className="text-xs text-accent font-medium">${project.donated}</div>
-                  </div>
-                  <div className="space-y-2">
-                    <Progress value={project.progress} className="h-2" />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{project.progress}% funded</span>
-                      <Badge className={`text-xs ${getStatusColor(project.status)}`}>{project.status}</Badge>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="activity" className="space-y-4">
-          {/* Role Applications */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Role Applications</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {roleApplications.map((application) => (
-                <div key={application.id} className="border rounded-lg p-3">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h4 className="font-medium text-sm">{application.role}</h4>
-                      <p className="text-xs text-muted-foreground">{application.projectTitle}</p>
-                    </div>
-                    <Badge className={`text-xs ${getStatusColor(application.status)}`}>{application.status}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Applied {application.appliedDate}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                Account Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                Edit Profile
-              </Button>
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                Notification Preferences
-              </Button>
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                Privacy Settings
-              </Button>
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                Connect Wallet
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Account Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button 
+            variant="outline" 
+            className="w-full justify-start bg-transparent"
+            onClick={() => setEditDialogOpen(true)}
+          >
+            Edit Profile
+          </Button>
+          <Button variant="outline" className="w-full justify-start bg-transparent">
+            Notification Preferences
+          </Button>
+          <Button variant="outline" className="w-full justify-start bg-transparent">
+            Privacy Settings
+          </Button>
+          <Button variant="outline" className="w-full justify-start bg-transparent">
+            Connect Wallet
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   )
 }
