@@ -7,6 +7,7 @@ import { z } from "zod";
 const profileSchema = z.object({
   displayName: z.string().min(1, "Display name is required"),
   bio: z.string().optional(),
+  location: z.string().optional(),
   skills: z.array(z.string()).optional(),
   avatarUrl: z.string().optional(),
 });
@@ -28,12 +29,13 @@ export async function POST(req: Request) {
     }
 
     // Update the user profile in the existing users table
-    const { displayName, bio, avatarUrl, skills } = result.data;
+    const { displayName, bio, location, avatarUrl, skills } = result.data;
     const { error: updateError } = await supabaseAdmin
       .from('users')
       .update({
         name: displayName,
         bio: bio,
+        location: location,
         avatar: avatarUrl,
         updated_at: new Date().toISOString()
       })

@@ -1,28 +1,53 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { Edit, Settings, Heart, TrendingUp, Award } from "lucide-react"
+import { Edit, Settings, Heart, TrendingUp, Award, Loader2, X } from "lucide-react"
+import { supabaseBrowser } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
-// Mock user data
-const userData = {
-  name: "Sarah Chen",
-  bio: "Water engineer passionate about sustainable development and community empowerment. 8+ years experience in rural infrastructure projects.",
-  avatar: "/placeholder.svg?height=80&width=80",
-  location: "San Francisco, CA",
-  joinDate: "January 2024",
-  verified: true,
-  skills: ["Project Management", "Water Engineering", "Community Organizing", "Fundraising", "Technical Writing"],
+// Interface for user data
+interface UserData {
+  id: string;
+  name: string;
+  bio: string | null;
+  avatar: string | null;
+  location: string | null;
+  join_date: string;
+  verified: boolean;
+  skills: string[];
   stats: {
-    projectsCreated: 3,
-    projectsSupported: 12,
-    totalDonated: 2450,
-    impactScore: 89,
+    projectsCreated: number;
+    projectsSupported: number;
+    totalDonated: number;
+    impactScore: number;
+  };
+}
+
+// Default user data
+const defaultUserData: UserData = {
+  id: "",
+  name: "Loading...",
+  bio: null,
+  avatar: null,
+  location: null,
+  join_date: new Date().toISOString(),
+  verified: false,
+  skills: [],
+  stats: {
+    projectsCreated: 0,
+    projectsSupported: 0,
+    totalDonated: 0,
+    impactScore: 0,
   },
 }
 
@@ -106,6 +131,165 @@ const roleApplications = [
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("overview")
+  const [userData, setUserData] = useState<UserData>(defaultUserData)
+  const [loading, setLoading] = useState(true)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    bio: "",
+    location: "",
+    skills: [] as string[]
+  })
+  const [saving, setSaving] = useState(false)
+  const router = useRouter()
+  const supabase = supabaseBrowser()
+
+  // Fetch user data
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        setLoading(true)
+        
+        // Get authenticated user
+        const { data: authData } = await supabase.auth.getUser()
+        if (!authData.user) {
+          router.push('/login')
+          return
+        }
+
+        // Get user profile from users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single()
+
+        if (userError) {
+          console.error('Error fetching user data:', userError)
+          return
+        }
+
+        // Get user skills
+        const { data: userSkillsData, error: skillsError } = await supabase
+          .from('user_skills')
+          .select('skill_id')
+          .eq('user_id', authData.user.id)
+
+        if (skillsError) {
+          console.error('Error fetching user skills:', skillsError)
+        }
+
+        // Get skill names from skill IDs
+        let skills: string[] = []
+        if (userSkillsData && userSkillsData.length > 0) {
+          const skillIds = userSkillsData.map(item => item.skill_id)
+          const { data: skillsData } = await supabase
+            .from('skills')
+            .select('name')
+            .in('id', skillIds)
+          
+          skills = skillsData?.map(skill => skill.name) || []
+        }
+
+        // Format join date
+        const joinDate = userData.join_date 
+          ? new Date(userData.join_date).toLocaleDateString('en-US', { 
+              year: 'numeric', 
+              month: 'long'
+            })
+          : 'Recently'
+
+        // Set user data
+        setUserData({
+          id: userData.id,
+          name: userData.name || 'Anonymous User',
+          bio: userData.bio,
+          avatar: userData.avatar,
+          location: userData.location,
+          join_date: joinDate,
+          verified: userData.verified || false,
+          skills: skills.filter(Boolean), // Remove empty strings
+          stats: {
+            // For now, use mock stats
+            projectsCreated: 0,
+            projectsSupported: 0,
+            totalDonated: 0,
+            impactScore: 0,
+          }
+        })
+
+        // Initialize edit form data
+        setEditFormData({
+          name: userData.name || '',
+          bio: userData.bio || '',
+          location: userData.location || '',
+          skills: skills.filter(Boolean)
+        })
+      } catch (error) {
+        console.error('Error in fetchUserData:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserData()
+  }, [supabase, router])
+
+  // Handle profile update
+  const handleUpdateProfile = async () => {
+    try {
+      setSaving(true)
+      
+      // Call the profile API to update the user data
+      const response = await fetch('/api/me/profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          displayName: editFormData.name,
+          bio: editFormData.bio,
+          location: editFormData.location,
+          skills: editFormData.skills,
+          // Keep the existing avatar
+          avatarUrl: userData.avatar
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update profile')
+      }
+
+      // Update the local state with the new data
+      setUserData(prev => ({
+        ...prev,
+        name: editFormData.name,
+        bio: editFormData.bio,
+        location: editFormData.location,
+        skills: editFormData.skills
+      }))
+
+      // Close the dialog
+      setEditDialogOpen(false)
+      
+      // Refresh the page to show updated data
+      router.refresh()
+    } catch (error) {
+      console.error('Error updating profile:', error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Handle skill toggle in edit form
+  const handleSkillToggle = (skill: string) => {
+    setEditFormData(prev => ({
+      ...prev,
+      skills: prev.skills.includes(skill)
+        ? prev.skills.filter(s => s !== skill)
+        : [...prev.skills, skill]
+    }))
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -142,11 +326,90 @@ export default function ProfilePage() {
                 {userData.verified && <Award className="h-5 w-5 text-accent" />}
               </div>
               <p className="text-sm text-muted-foreground mb-2">{userData.location}</p>
-              <p className="text-sm text-muted-foreground">Joined {userData.joinDate}</p>
+              <p className="text-sm text-muted-foreground">Joined {userData.join_date}</p>
             </div>
-            <Button variant="outline" size="icon">
-              <Edit className="h-4 w-4" />
-            </Button>
+            <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Edit Profile</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      value={editFormData.name}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="bio">Bio</Label>
+                    <Textarea
+                      id="bio"
+                      value={editFormData.bio}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, bio: e.target.value }))}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="location">Location</Label>
+                    <Input
+                      id="location"
+                      value={editFormData.location}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, location: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Skills</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {/* Show existing skills with toggle functionality */}
+                      {editFormData.skills.map(skill => (
+                        <Badge 
+                          key={skill} 
+                          variant="default" 
+                          className="cursor-pointer bg-accent text-accent-foreground hover:bg-accent/90"
+                          onClick={() => handleSkillToggle(skill)}
+                        >
+                          {skill}
+                          <X className="ml-1 h-3 w-3" />
+                        </Badge>
+                      ))}
+                      
+                      {/* Show some suggested skills */}
+                      <div className="w-full mt-2">
+                        <Label className="text-xs">Suggested Skills</Label>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {["Community Organizing", "Fundraising", "Project Management", "Writing", "Design"].map(skill => (
+                            !editFormData.skills.includes(skill) && (
+                              <Badge 
+                                key={skill} 
+                                variant="outline" 
+                                className="cursor-pointer hover:bg-muted"
+                                onClick={() => handleSkillToggle(skill)}
+                              >
+                                {skill}
+                              </Badge>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleUpdateProfile} disabled={saving}>
+                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Changes
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <p className="text-sm leading-relaxed mb-4 text-pretty">{userData.bio}</p>
