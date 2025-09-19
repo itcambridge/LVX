@@ -13,7 +13,8 @@ import Image from "next/image"
 import { supabaseBrowser } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 
-const SUGGESTED_SKILLS = [
+// Default skills to show if we can't fetch from the database
+const DEFAULT_SKILLS = [
   "Community Organizing",
   "Social Media",
   "Fundraising",
@@ -37,8 +38,35 @@ export default function OnboardingPage() {
     avatar: "",
   })
   const [loading, setLoading] = useState(false)
+  const [availableSkills, setAvailableSkills] = useState<string[]>(DEFAULT_SKILLS)
   const supabase = supabaseBrowser()
   const router = useRouter()
+  
+  // Fetch skills from the database
+  useEffect(() => {
+    const fetchSkills = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('skills')
+          .select('name')
+          .order('name')
+        
+        if (error) {
+          console.error('Error fetching skills:', error)
+          return
+        }
+        
+        if (data && data.length > 0) {
+          const skillNames = data.map(skill => skill.name)
+          setAvailableSkills(skillNames)
+        }
+      } catch (error) {
+        console.error('Error fetching skills:', error)
+      }
+    }
+    
+    fetchSkills()
+  }, [supabase])
   
   // Check if user is already authenticated
   useEffect(() => {
@@ -294,7 +322,7 @@ export default function OnboardingPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                {SUGGESTED_SKILLS.map((skill) => {
+                {availableSkills.map((skill: string) => {
                   const isSelected = formData.skills.includes(skill)
                   return (
                     <Badge

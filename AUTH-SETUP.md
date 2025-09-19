@@ -1,73 +1,58 @@
 # Authentication Setup Guide
 
-This guide explains how to set up the authentication system for the FreeSpeech.Live platform.
+This guide explains how to set up the authentication system for the FreeSpeech.Live platform using your existing Supabase project and database tables.
 
 ## Overview
 
-The authentication system uses Supabase for user authentication and Drizzle ORM for database operations. The system supports:
+The authentication system uses Supabase for user authentication and connects to your existing database tables. The system supports:
 
 - Google OAuth authentication
-- Email OTP (One-Time Password) authentication
-- User profiles with skills and roles
 - Protected routes that require authentication
+- Integration with your existing users and skills tables
 
 ## Setup Steps
 
-### 1. Supabase Configuration
+### 1. Supabase Authentication Configuration
 
-1. Create a new project in the [Supabase Dashboard](https://app.supabase.com/)
-2. Enable the Authentication service
-3. Configure Google OAuth:
+1. In your existing Supabase project, go to Authentication > Providers
+2. Enable Google OAuth:
    - Go to Authentication > Providers > Google
    - Enable Google authentication
    - Create OAuth credentials in the [Google Cloud Console](https://console.cloud.google.com/):
-     - Create a new project
+     - Create a new project (or use an existing one)
      - Configure the OAuth consent screen
      - Create OAuth 2.0 Client ID
      - Add authorized redirect URIs: `https://[YOUR_PROJECT_REF].supabase.co/auth/v1/callback`
    - Add the Client ID and Client Secret to Supabase
-4. Configure the Redirect URL in Supabase:
+3. Configure the Redirect URL in Supabase:
    - Go to Authentication > URL Configuration
    - Add your site URL: `https://yourdomain.com/auth/callback` (and `http://localhost:3000/auth/callback` for development)
 
 ### 2. Environment Variables
 
-Create a `.env.local` file based on the `.env.example` template:
+Your `.env.local` file should contain:
 
 ```
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 
-# Database Configuration (for Drizzle)
-DATABASE_URL=postgres://postgres:password@localhost:5432/postgres
-
 # Site Configuration
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
-- Get the `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from your Supabase project settings
-- Set `DATABASE_URL` to your Postgres database connection string
+- The `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` should already be set correctly
 - Set `NEXT_PUBLIC_SITE_URL` to your site's URL
 
-### 3. Database Setup
+### 3. Existing Database Tables
 
-The database schema is defined in `db/schema.ts` and includes tables for:
+The authentication system uses your existing database tables:
 
-- `profiles`: User profile information
-- `userRoles`: User roles (user, creator, admin, moderator)
-- `userSkills`: User skills and interests
-- `accounts`: Authentication provider information
+- `users`: User profile information (id, name, avatar, bio, location, etc.)
+- `skills`: Available skills that users can select
+- `user_skills`: Junction table connecting users to their skills
 
-To create these tables in your database:
-
-```bash
-# Generate SQL migrations
-pnpm db:generate
-
-# Apply migrations to the database
-pnpm db:push
-```
+No additional tables need to be created as your database already has all the necessary tables.
 
 ### 4. Protected Routes
 
@@ -77,14 +62,13 @@ Routes that require authentication should be placed in the `app/(protected)` dir
 
 1. Users can sign in via:
    - Google OAuth
-   - Email OTP (coming soon)
    - Anonymous (continue without signing in)
 
 2. After authentication, users complete the onboarding process:
    - Profile information (name, bio, avatar)
    - Skills and interests
 
-3. User data is stored in the database and the user is redirected to the home page
+3. User data is stored in your existing database tables and the user is redirected to the home page
 
 ## API Endpoints
 
@@ -92,16 +76,8 @@ Routes that require authentication should be placed in the `app/(protected)` dir
 - `/api/me/profile`: Update user profile
 - `/api/me/bootstrap`: Ensure user profile exists
 
-## Switching to Linode Postgres
-
-The authentication system is designed to be portable. To switch from Supabase Postgres to Linode Postgres:
-
-1. Update the `DATABASE_URL` in your environment variables to point to your Linode Postgres instance
-2. Run the database migrations on the Linode server
-3. The authentication will continue to use Supabase, but all user data will be stored in your Linode database
-
 ## Troubleshooting
 
 - **Authentication Errors**: Check the Supabase dashboard for authentication logs
-- **Database Errors**: Verify your database connection string and permissions
+- **Database Errors**: Verify your database connection and permissions
 - **Redirect Issues**: Ensure the redirect URLs are correctly configured in Supabase

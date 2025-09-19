@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { db } from "@/lib/db";
-import { profiles, userRoles, accounts } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { supabase as supabaseAdmin } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -39,22 +37,35 @@ export async function GET(req: Request) {
   const user = data.user;
   if (user) {
     const uid = user.id;
-    const [existing] = await db.select().from(profiles).where(eq(profiles.userId, uid)).limit(1);
+    
+    // Check if user exists in the users table
+    const { data: existingUser, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('id', uid)
+      .single();
 
-    if (!existing) {
-      await db.insert(profiles).values({
-        userId: uid,
-        displayName: (user.user_metadata?.name as string) ??
-                     user.email?.split("@")[0] ??
-                     "New User",
-        avatarUrl: (user.user_metadata?.avatar_url as string) ?? null,
-      });
-      await db.insert(userRoles).values({ userId: uid, role: "user" });
-      await db.insert(accounts).values({
-        userId: uid,
-        provider: (user.app_metadata?.provider as string) ?? "email",
-        providerUserId: user.identities?.[0]?.id ?? null,
-      });
+    if (userError && userError.code !== 'PGRST116') { // PGRST116 is "not found" error
+      console.error('Error checking user:', userError);
+    }
+
+    // If user doesn't exist, create a new user record
+    if (!existingUser) {
+      const { error: insertError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          id: uid,
+          name: (user.user_metadata?.name as string) ?? 
+                user.email?.split("@")[0] ?? 
+                "New User",
+          avatar: (user.user_metadata?.avatar_url as string) ?? null,
+          join_date: new Date().toISOString(),
+          verified: false
+        });
+
+      if (insertError) {
+        console.error('Error creating user:', insertError);
+      }
     }
   }
 
