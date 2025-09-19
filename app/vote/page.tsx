@@ -143,7 +143,7 @@ export default function VotePage() {
           
           if (userId) {
             const { data: voteData, error: voteError } = await supabase
-              .from('poll_votes')
+              .from('votes')
               .select('option_id')
               .eq('poll_id', poll.id)
               .eq('user_id', userId)
@@ -302,7 +302,7 @@ export default function VotePage() {
 
       // Insert vote into database
       const { error } = await supabase
-        .from('poll_votes')
+        .from('votes')
         .insert({
           poll_id: pollId,
           option_id: selectedOption,
