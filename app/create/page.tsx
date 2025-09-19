@@ -13,14 +13,13 @@ import { ArrowLeft, ArrowRight, Upload, Sparkles, Plus, X } from "lucide-react"
 import Link from "next/link"
 
 const CATEGORIES = [
-  "Environment",
-  "Education",
-  "Community",
-  "Healthcare",
-  "Social Justice",
+  "Free Speech",
+  "Immigration",
+  "Culture",
   "Technology",
-  "Arts & Culture",
-  "Economic Development",
+  "Law",
+  "Politics",
+  "Protest",
 ]
 
 const SUGGESTED_SKILLS = [
@@ -616,8 +615,11 @@ const getEndDate = (duration: string): string | null => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label>Project Images</Label>
+                <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Project Images</Label>
+                  <span className="text-xs text-muted-foreground">1920×1080 pixels</span>
+                </div>
                 <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
                   <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mb-2">Upload project images</p>
