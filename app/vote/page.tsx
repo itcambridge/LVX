@@ -365,6 +365,20 @@ export default function VotePage() {
         </p>
       </div>
 
+      {/* Call to Action - Always visible */}
+      <Card className="bg-muted">
+        <CardContent className="text-center py-6">
+          <AlertCircle className="h-8 w-8 mx-auto mb-2 text-accent" />
+          <h3 className="font-semibold mb-2">Have a Proposal?</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Community members can propose new polls for platform improvements and policy changes.
+          </p>
+          <Button variant="outline" className="bg-transparent" asChild>
+            <a href="/vote/submit">Submit Proposal</a>
+          </Button>
+        </CardContent>
+      </Card>
+
       {loading ? (
         // Loading state
         <div className="space-y-4">
@@ -539,20 +553,6 @@ export default function VotePage() {
               </Card>
             ))}
           </div>
-
-          {/* Call to Action */}
-          <Card className="bg-muted">
-            <CardContent className="text-center py-6">
-              <AlertCircle className="h-8 w-8 mx-auto mb-2 text-accent" />
-              <h3 className="font-semibold mb-2">Have a Proposal?</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Community members can propose new polls for platform improvements and policy changes.
-              </p>
-              <Button variant="outline" className="bg-transparent" asChild>
-                <a href="/vote/submit">Submit Proposal</a>
-              </Button>
-            </CardContent>
-          </Card>
         </>
       )}
     </div>
