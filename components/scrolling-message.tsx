@@ -15,8 +15,8 @@ export function ScrollingMessage({
 }: ScrollingMessageProps) {
   const [isPaused, setIsPaused] = useState(false)
   
-  // Fixed animation duration - slower for better readability
-  const animationDuration = 60 // seconds
+  // Fixed animation duration - much slower for better readability
+  const animationDuration = 120 // seconds
 
   return (
     <div
