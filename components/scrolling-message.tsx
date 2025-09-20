@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 
 interface ScrollingMessageProps {
   message: string
@@ -10,53 +10,51 @@ interface ScrollingMessageProps {
 
 export function ScrollingMessage({
   message,
-  speed = 50,
+  speed = 40,
   pauseOnHover = true,
 }: ScrollingMessageProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [animationDuration, setAnimationDuration] = useState(0)
-  const [isPaused, setIsPaused] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (containerRef.current && contentRef.current) {
-      // Calculate the animation duration based on content width and speed
-      const containerWidth = containerRef.current.offsetWidth
-      const contentWidth = contentRef.current.offsetWidth
-      const totalWidth = containerWidth + contentWidth
-      const duration = totalWidth / speed
-
-      setAnimationDuration(duration)
+    // This effect ensures the animation restarts if the component re-renders
+    const scrollElement = scrollRef.current
+    if (scrollElement) {
+      scrollElement.style.animation = 'none'
+      // Force reflow
+      void scrollElement.offsetWidth
+      scrollElement.style.animation = ''
     }
-  }, [message, speed])
+  }, [message])
 
   return (
-    <div
-      ref={containerRef}
+    <div 
       className="bg-red-600 text-white py-2 overflow-hidden whitespace-nowrap text-sm font-medium"
-      onMouseEnter={() => pauseOnHover && setIsPaused(true)}
-      onMouseLeave={() => pauseOnHover && setIsPaused(false)}
+      style={{ position: 'relative' }}
     >
-      <div className="max-w-md mx-auto px-4 relative">
-        <div
-          ref={contentRef}
-          className="inline-block px-4"
-          style={{
-            animation: `scrollText ${animationDuration}s linear infinite`,
-            animationPlayState: isPaused ? "paused" : "running",
-          }}
-        >
-          {message}
-        </div>
+      <div 
+        ref={scrollRef}
+        className="inline-block px-4 animate-marquee"
+        style={{ 
+          animationDuration: `${message.length / speed}s`,
+          animationPlayState: pauseOnHover ? 'paused' : 'running',
+        }}
+        onMouseEnter={(e) => pauseOnHover && (e.currentTarget.style.animationPlayState = 'paused')}
+        onMouseLeave={(e) => pauseOnHover && (e.currentTarget.style.animationPlayState = 'running')}
+      >
+        {message}
       </div>
+      
       <style jsx>{`
-        @keyframes scrollText {
+        @keyframes marquee {
           0% {
-            transform: translateX(100%);
+            transform: translateX(100vw);
           }
           100% {
             transform: translateX(-100%);
           }
+        }
+        .animate-marquee {
+          animation: marquee linear infinite;
         }
       `}</style>
     </div>
