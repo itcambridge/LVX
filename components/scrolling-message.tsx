@@ -13,36 +13,25 @@ export function ScrollingMessage({
   speed = 50,
   pauseOnHover = true,
 }: ScrollingMessageProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [animationDuration, setAnimationDuration] = useState(30) // Default duration
+  // Use a simpler approach with fixed animation duration
+  // This avoids issues with measuring DOM elements during hydration
+  const messageLength = message.length
+  const baseDuration = 20 // Base duration in seconds
+  const calculatedDuration = Math.max(baseDuration, messageLength / 10)
+  
   const [isPaused, setIsPaused] = useState(false)
-
-  useEffect(() => {
-    if (containerRef.current && contentRef.current) {
-      // Calculate the animation duration based on content width and speed
-      const containerWidth = containerRef.current.offsetWidth
-      const contentWidth = contentRef.current.offsetWidth
-      const totalWidth = containerWidth + contentWidth
-      const duration = totalWidth / speed
-
-      setAnimationDuration(duration)
-    }
-  }, [message, speed])
 
   return (
     <div
-      ref={containerRef}
       className="bg-red-600 text-white py-2 overflow-hidden whitespace-nowrap text-sm font-medium"
       onMouseEnter={() => pauseOnHover && setIsPaused(true)}
       onMouseLeave={() => pauseOnHover && setIsPaused(false)}
     >
-      <div className="max-w-md mx-auto px-4 relative">
+      <div className="relative">
         <div
-          ref={contentRef}
-          className="inline-block px-4"
+          className="inline-block px-4 animate-scroll"
           style={{
-            animation: `scrollText ${animationDuration}s linear infinite`,
+            animationDuration: `${calculatedDuration}s`,
             animationPlayState: isPaused ? "paused" : "running",
           }}
         >
@@ -50,6 +39,10 @@ export function ScrollingMessage({
         </div>
       </div>
       <style jsx>{`
+        .animate-scroll {
+          animation: scrollText linear infinite;
+          animation-delay: 0s;
+        }
         @keyframes scrollText {
           0% {
             transform: translateX(100%);
