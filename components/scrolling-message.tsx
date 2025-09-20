@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 
 interface ScrollingMessageProps {
   message: string
@@ -13,13 +13,10 @@ export function ScrollingMessage({
   speed = 50,
   pauseOnHover = true,
 }: ScrollingMessageProps) {
-  // Use a simpler approach with fixed animation duration
-  // This avoids issues with measuring DOM elements during hydration
-  const messageLength = message.length
-  const baseDuration = 20 // Base duration in seconds
-  const calculatedDuration = Math.max(baseDuration, messageLength / 10)
-  
   const [isPaused, setIsPaused] = useState(false)
+  
+  // Fixed animation duration - much shorter for better user experience
+  const animationDuration = 15 // seconds
 
   return (
     <div
@@ -27,23 +24,33 @@ export function ScrollingMessage({
       onMouseEnter={() => pauseOnHover && setIsPaused(true)}
       onMouseLeave={() => pauseOnHover && setIsPaused(false)}
     >
-      <div className="relative">
+      <div className="marquee-container">
         <div
-          className="inline-block px-4 animate-scroll"
+          className="marquee-content"
           style={{
-            animationDuration: `${calculatedDuration}s`,
+            animationDuration: `${animationDuration}s`,
             animationPlayState: isPaused ? "paused" : "running",
           }}
         >
-          {message}
+          <span className="px-4">{message}</span>
+          <span className="px-4">{message}</span>
         </div>
       </div>
+      
       <style jsx>{`
-        .animate-scroll {
-          animation: scrollText linear infinite;
+        .marquee-container {
+          width: 100%;
+          overflow: hidden;
+        }
+        
+        .marquee-content {
+          display: inline-block;
+          white-space: nowrap;
+          animation: marquee linear infinite;
           animation-delay: 0s;
         }
-        @keyframes scrollText {
+        
+        @keyframes marquee {
           0% {
             transform: translateX(100%);
           }
