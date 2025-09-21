@@ -13,7 +13,7 @@ interface ScrollingMessageProps {
 
 export function ScrollingMessage({
   message,
-  speed = 50,
+  speed = 90,
   pauseOnHover = true,
   repeat = 3,
 }: ScrollingMessageProps) {
