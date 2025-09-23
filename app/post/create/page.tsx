@@ -50,6 +50,21 @@ function CreatePostInner() {
   const [finalMd, setFinalMd] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Add this useEffect to log the draft data whenever it changes
+  useEffect(() => {
+    console.log("DRAFT DATA UPDATED:", JSON.stringify(draft, null, 2));
+    if (draft.s1) {
+      console.log("S1 STRUCTURE:", JSON.stringify(draft.s1, null, 2));
+      console.log("GRIEVANCES STRUCTURE:", 
+        draft.s1.grievances ? JSON.stringify(draft.s1.grievances, null, 2) : "undefined");
+    }
+    if (draft.s2) {
+      console.log("S2 STRUCTURE:", JSON.stringify(draft.s2, null, 2));
+      console.log("CLAIMS STRUCTURE:", 
+        draft.s2.claims ? JSON.stringify(draft.s2.claims, null, 2) : "undefined");
+    }
+  }, [draft]);
 
   // Sync error state with planner error
   useEffect(() => {
@@ -196,17 +211,24 @@ function CreatePostInner() {
               <p className="italic">{typeof draft.s1.reflection === 'string' ? draft.s1.reflection : "I understand your concerns."}</p>
               <ul className="list-disc pl-5 mt-2">
                 {(() => {
+                  console.log("RENDERING GRIEVANCES:", 
+                    draft.s1?.grievances ? JSON.stringify(draft.s1.grievances, null, 2) : "undefined");
+                  
                   const g =
                     Array.isArray(draft.s1?.grievances) ? draft.s1.grievances :
                     Array.isArray(draft.s1?.grievances?.claims) ? draft.s1.grievances.claims :
                     [];
+                  
+                  console.log("PROCESSED GRIEVANCES ARRAY:", JSON.stringify(g, null, 2));
 
                   if (!g.length) {
                     return <li>Grievance information not available in expected format</li>;
                   }
 
                   return g.map((item: any, i: number) => {
+                    console.log(`GRIEVANCE ITEM ${i}:`, JSON.stringify(item, null, 2));
                     const text = toText(item);
+                    console.log(`GRIEVANCE TEXT ${i}:`, text);
                     const emotion =
                       item && typeof item === "object" && "emotion" in item && item.emotion
                         ? ` (${item.emotion})`
@@ -223,9 +245,19 @@ function CreatePostInner() {
               <p className="font-medium mb-2">Generated Claims:</p>
               
               <ul className="list-disc pl-5">
-                {Array.isArray(draft.s2?.claims) && draft.s2.claims.length ? (
-                  draft.s2.claims.map((c: any, i: number) => {
+                {(() => {
+                  console.log("RENDERING CLAIMS:", 
+                    draft.s2?.claims ? JSON.stringify(draft.s2.claims, null, 2) : "undefined");
+                  
+                  if (!Array.isArray(draft.s2?.claims) || !draft.s2.claims.length) {
+                    return <li>No claims generated yet</li>;
+                  }
+                  
+                  return draft.s2.claims.map((c: any, i: number) => {
+                    console.log(`CLAIM ITEM ${i}:`, JSON.stringify(c, null, 2));
                     const claimText = toText(c);
+                    console.log(`CLAIM TEXT ${i}:`, claimText);
+                    
                     const claimType =
                       c && typeof c === "object"
                         ? (c.type ?? (typeof c.falsifiable === "boolean"
@@ -258,10 +290,8 @@ function CreatePostInner() {
                         )}
                       </li>
                     );
-                  })
-                ) : (
-                  <li>No claims generated yet</li>
-                )}
+                  });
+                })()}
               </ul>
               {draft.s2 && typeof draft.s2.evidence_request === 'string' && (
                 <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
