@@ -10,67 +10,300 @@ export default function CreatePost() {
   const [draft, setDraft] = useState<any>({});
   const [post, setPost] = useState<any>(null);
   const [finalMd, setFinalMd] = useState("");
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function publish() {
-    const body = post?.body_markdown || finalMd;
-    await fetch("/api/projects/publish", {
-      method:"POST",
-      body: JSON.stringify({ projectId, title: post?.titles?.[0] || "Untitled", tldr: post?.tldr || "", body_markdown: body })
-    });
-    window.location.href = `/project/${projectId}`;
+    try {
+      setLoading("publishing");
+      const body = post?.body_markdown || finalMd;
+      await fetch("/api/projects/publish", {
+        method:"POST",
+        body: JSON.stringify({ projectId, title: post?.titles?.[0] || "Untitled", tldr: post?.tldr || "", body_markdown: body })
+      });
+      window.location.href = `/project/${projectId}`;
+    } catch (err) {
+      setError("Failed to publish. Please try again.");
+      setLoading(null);
+    }
+  }
+
+  async function runStage(stageNum: number, input: any) {
+    try {
+      setLoading(`stage${stageNum}`);
+      setError(null);
+      let result: any;
+      
+      switch(stageNum) {
+        case 1:
+          result = await planner.runStage1(input);
+          break;
+        case 2:
+          result = await planner.runStage2(input);
+          break;
+        case 3:
+          result = await planner.runStage3(input);
+          break;
+        case 4:
+          result = await planner.runStage4(input);
+          break;
+        case 5:
+          result = await planner.runStage5(input);
+          break;
+        case 6:
+          result = await planner.runStage6(input);
+          break;
+        case 7:
+          result = await planner.runStage7(input);
+          if (result) {
+            setPost(result);
+            setFinalMd(result.body_markdown || "");
+          }
+          break;
+        case 8:
+          const { scores, rewrite } = await planner.scoreAndMaybeRewrite(input);
+          if (rewrite) setFinalMd(rewrite);
+          result = scores;
+          break;
+      }
+      
+      if (stageNum < 7) {
+        setDraft((d:any) => ({...d, [`s${stageNum}`]: result}));
+      }
+      
+      setLoading(null);
+      return result;
+    } catch (err: any) {
+      console.error(`Error in stage ${stageNum}:`, err);
+      setError(`Failed to process stage ${stageNum}: ${err.message || "Unknown error"}`);
+      setLoading(null);
+      return null;
+    }
   }
 
   return (
     <div className="max-w-xl mx-auto p-4 space-y-6">
       <h1 className="text-xl font-semibold">Create Political Media Post</h1>
 
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+          {error}
+          <button 
+            className="absolute top-0 right-0 px-4 py-3" 
+            onClick={() => setError(null)}
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {/* Stage 1 */}
-      <section>
+      <section className={planner.stage !== 1 ? "opacity-50" : ""}>
         <h2 className="font-medium">1) Vent</h2>
-        <textarea className="w-full border rounded p-2" rows={4} value={vent} onChange={e=>setVent(e.target.value)} />
-        <button className="btn" onClick={async ()=>{
-          const s1 = await planner.runStage1(vent); setDraft((d:any)=>({...d, s1}));
-        }}>Next</button>
+        <textarea 
+          className="w-full border rounded p-2 mb-2" 
+          rows={4} 
+          value={vent} 
+          onChange={e => setVent(e.target.value)}
+          disabled={planner.stage !== 1}
+        />
+        <button 
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={() => runStage(1, vent)}
+          disabled={!vent.trim() || loading === "stage1" || planner.stage !== 1}
+        >
+          {loading === "stage1" ? "Processing..." : "Next"}
+        </button>
       </section>
 
-      {/* Repeat similarly for Stages 2–6 using planner.runStageX(...) */}
+      {/* Stage 2 */}
+      {planner.stage >= 2 && (
+        <section className={planner.stage !== 2 ? "opacity-50" : ""}>
+          <h2 className="font-medium">2) Claims</h2>
+          {draft.s1 && (
+            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
+              <p className="italic">{draft.s1.reflection}</p>
+              <ul className="list-disc pl-5 mt-2">
+                {draft.s1.grievances.map((g: any, i: number) => (
+                  <li key={i}>{g.text} {g.emotion ? `(${g.emotion})` : ""}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <button 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => runStage(2, draft.s1)}
+            disabled={loading === "stage2" || planner.stage !== 2}
+          >
+            {loading === "stage2" ? "Processing..." : "Generate Claims"}
+          </button>
+        </section>
+      )}
+
+      {/* Stage 3 */}
+      {planner.stage >= 3 && (
+        <section className={planner.stage !== 3 ? "opacity-50" : ""}>
+          <h2 className="font-medium">3) Steelman & Stakeholders</h2>
+          {draft.s2 && (
+            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
+              <p className="font-medium">Claims:</p>
+              <ul className="list-disc pl-5">
+                {draft.s2.claims.map((c: any, i: number) => (
+                  <li key={i}>{c.claim} ({c.type})</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
+            </div>
+          )}
+          <button 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => runStage(3, draft.s2)}
+            disabled={loading === "stage3" || planner.stage !== 3}
+          >
+            {loading === "stage3" ? "Processing..." : "Map Stakeholders"}
+          </button>
+        </section>
+      )}
+
+      {/* Stage 4 */}
+      {planner.stage >= 4 && (
+        <section className={planner.stage !== 4 ? "opacity-50" : ""}>
+          <h2 className="font-medium">4) SMART Goals</h2>
+          {draft.s3 && (
+            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
+              <p className="font-medium">Analyses:</p>
+              {draft.s3.analyses.map((a: any, i: number) => (
+                <div key={i} className="mb-2">
+                  <p><strong>Claim:</strong> {a.claim}</p>
+                  <p><strong>Steelman:</strong> {a.steelman}</p>
+                  <p><strong>Stakeholders:</strong> {a.stakeholders.length}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <button 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => runStage(4, draft.s3)}
+            disabled={loading === "stage4" || planner.stage !== 4}
+          >
+            {loading === "stage4" ? "Processing..." : "Set Goals"}
+          </button>
+        </section>
+      )}
+
+      {/* Stage 5 */}
+      {planner.stage >= 5 && (
+        <section className={planner.stage !== 5 ? "opacity-50" : ""}>
+          <h2 className="font-medium">5) Plan Options</h2>
+          {draft.s4 && (
+            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
+              <p className="font-medium">Goals:</p>
+              <ul className="list-disc pl-5">
+                {draft.s4.goals.map((g: any, i: number) => (
+                  <li key={i}>
+                    <strong>{g.title}</strong>
+                    <p className="text-xs">Metric: {g.metric.name} ({g.metric.baseline} → {g.metric.target})</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <button 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => runStage(5, draft.s4)}
+            disabled={loading === "stage5" || planner.stage !== 5}
+          >
+            {loading === "stage5" ? "Processing..." : "Generate Plans"}
+          </button>
+        </section>
+      )}
+
+      {/* Stage 6 */}
+      {planner.stage >= 6 && (
+        <section className={planner.stage !== 6 ? "opacity-50" : ""}>
+          <h2 className="font-medium">6) Task Board</h2>
+          {draft.s5 && (
+            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
+              <p className="font-medium">Plans:</p>
+              {draft.s5.plans.map((p: any, i: number) => (
+                <div key={i} className="mb-2 pb-2 border-b">
+                  <p><strong>{p.name}</strong></p>
+                  <p className="text-xs">Time: {p.time_range_days[0]}-{p.time_range_days[1]} days</p>
+                  <p className="text-xs">Budget: {p.budget_range[0]}-{p.budget_range[1]}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <button 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => runStage(6, draft.s5)}
+            disabled={loading === "stage6" || planner.stage !== 6}
+          >
+            {loading === "stage6" ? "Processing..." : "Create Tasks"}
+          </button>
+        </section>
+      )}
 
       {/* Stage 7 */}
-      <section>
-        <h2 className="font-medium">7) Draft Story</h2>
-        <button className="btn" onClick={async ()=>{
-          const p = await planner.runStage7({ ...draft }); setPost(p); setFinalMd(p.body_markdown);
-        }}>Generate Post</button>
-        {post && (
-          <div>
-            <h3 className="mt-3">Preview</h3>
-            <textarea className="w-full border rounded p-2" rows={12} value={finalMd} onChange={e=>setFinalMd(e.target.value)} />
-          </div>
-        )}
-      </section>
+      {planner.stage >= 7 && (
+        <section className={planner.stage !== 7 ? "opacity-50" : ""}>
+          <h2 className="font-medium">7) Draft Story</h2>
+          {draft.s6 && (
+            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
+              <p className="font-medium">Roles: {draft.s6.roles.join(", ")}</p>
+              <p className="font-medium mt-2">Sprint Weeks: {draft.s6.sprint_weeks.length}</p>
+            </div>
+          )}
+          <button 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => runStage(7, draft)}
+            disabled={loading === "stage7" || planner.stage !== 7}
+          >
+            {loading === "stage7" ? "Processing..." : "Generate Post"}
+          </button>
+          {post && (
+            <div className="mt-3">
+              <h3 className="font-medium">Preview</h3>
+              <p className="text-sm font-medium mt-2">{post.titles?.[0]}</p>
+              <p className="text-sm italic mb-2">{post.tldr}</p>
+              <textarea 
+                className="w-full border rounded p-2" 
+                rows={12} 
+                value={finalMd} 
+                onChange={e => setFinalMd(e.target.value)} 
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Stage 8 */}
-      <section>
-        <h2 className="font-medium">8) Tone Score</h2>
-        <button className="btn" onClick={async ()=>{
-          const { scores, rewrite } = await planner.scoreAndMaybeRewrite(finalMd);
-          if (rewrite) setFinalMd(rewrite);
-        }}>Score / Rewrite</button>
-        <ToneMeter scores={planner.scores} />
-        {(planner.scores && (planner.scores.civility < 80 || planner.scores.heat > 30)) && (
-          <div className="text-amber-600 text-sm">
-            Warning: Civility below target or Heat above target. You can rewrite (recommended) or continue.
-          </div>
-        )}
-      </section>
+      {planner.stage >= 8 && (
+        <section>
+          <h2 className="font-medium">8) Tone Score</h2>
+          <button 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => runStage(8, finalMd)}
+            disabled={loading === "stage8" || !finalMd}
+          >
+            {loading === "stage8" ? "Processing..." : "Score / Rewrite"}
+          </button>
+          <ToneMeter scores={planner.scores} />
+          {(planner.scores && (planner.scores.civility < 80 || planner.scores.heat > 30)) && (
+            <div className="text-amber-600 text-sm mt-2">
+              Warning: Civility below target or Heat above target. You can rewrite (recommended) or continue.
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Publish (enabled only after Stage 8 reached) */}
       <button
-        disabled={planner.stage < 8}
-        className="btn-primary disabled:opacity-50"
+        disabled={planner.stage < 8 || !finalMd || loading === "publishing"}
+        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full mt-4"
         onClick={publish}
       >
-        Publish
+        {loading === "publishing" ? "Publishing..." : "Publish"}
       </button>
     </div>
   );
