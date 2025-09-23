@@ -4,7 +4,13 @@ import { useAiPlanner } from "@/hooks/useAiPlanner";
 import ToneMeter from "@/components/ai/tone-meter";
 
 export default function CreatePost() {
-  const [projectId] = useState<string>(crypto.randomUUID()); // or create a draft project row first
+  // Use a stable initial value and update it on the client side only
+  const [projectId, setProjectId] = useState<string>("temp-id");
+  
+  // Generate UUID only on the client side to avoid hydration mismatch
+  useEffect(() => {
+    setProjectId(crypto.randomUUID());
+  }, []);
   const planner = useAiPlanner(projectId);
   const [vent, setVent] = useState("");
   const [draft, setDraft] = useState<any>({});
@@ -176,16 +182,10 @@ export default function CreatePost() {
             <div className="mb-4 p-3 bg-blue-50 rounded text-sm">
               <p className="font-medium mb-2">Generated Claims:</p>
               
-              {/* Debug information */}
-              <div className="mb-2 p-2 bg-gray-100 text-xs">
-                <p>Debug - Claims data structure:</p>
-                <pre>{JSON.stringify(draft.s2, null, 2)}</pre>
-              </div>
-              
               <ul className="list-disc pl-5">
                 {Array.isArray(draft.s2.claims) ? 
                   draft.s2.claims.map((c: any, i: number) => {
-                    console.log("Claim object:", c);
+                    // Remove console.log to avoid client-side only code
                     
                     // Safely extract claim text with more detailed fallbacks
                     let claimText = "Claim details unavailable";
@@ -197,8 +197,8 @@ export default function CreatePost() {
                       } else if ('text' in c) {
                         claimText = c.text;
                       } else {
-                        // Try to stringify the object for debugging
-                        claimText = `Object: ${JSON.stringify(c)}`;
+                        // Use a stable representation instead of JSON.stringify
+                        claimText = "Complex claim object";
                       }
                     }
                     
@@ -221,7 +221,7 @@ export default function CreatePost() {
                             <p>Proposed evidence:</p>
                             <ul className="list-disc pl-4">
                               {evidence.map((e: any, j: number) => (
-                                <li key={j}>{typeof e === 'string' ? e : JSON.stringify(e)}</li>
+                                <li key={j}>{typeof e === 'string' ? e : "Complex evidence item"}</li>
                               ))}
                             </ul>
                           </div>
