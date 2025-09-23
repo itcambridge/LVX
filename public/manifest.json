@@ -9,13 +9,13 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "logo.png",
+      "src": "/logo.png",
       "sizes": "600x86",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "favicon.png",
+      "src": "/favicon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
