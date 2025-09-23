@@ -175,16 +175,37 @@ export default function CreatePost() {
           {draft.s2 && (
             <div className="mb-4 p-3 bg-blue-50 rounded text-sm">
               <p className="font-medium mb-2">Generated Claims:</p>
+              
+              {/* Debug information */}
+              <div className="mb-2 p-2 bg-gray-100 text-xs">
+                <p>Debug - Claims data structure:</p>
+                <pre>{JSON.stringify(draft.s2, null, 2)}</pre>
+              </div>
+              
               <ul className="list-disc pl-5">
                 {Array.isArray(draft.s2.claims) ? 
                   draft.s2.claims.map((c: any, i: number) => {
-                    // Safely extract claim text
-                    const claimText = typeof c === 'string' ? c : 
-                                     (typeof c === 'object' && c !== null && 'claim' in c ? c.claim : 
-                                     "Claim details unavailable");
+                    console.log("Claim object:", c);
+                    
+                    // Safely extract claim text with more detailed fallbacks
+                    let claimText = "Claim details unavailable";
+                    if (typeof c === 'string') {
+                      claimText = c;
+                    } else if (typeof c === 'object' && c !== null) {
+                      if ('claim' in c) {
+                        claimText = c.claim;
+                      } else if ('text' in c) {
+                        claimText = c.text;
+                      } else {
+                        // Try to stringify the object for debugging
+                        claimText = `Object: ${JSON.stringify(c)}`;
+                      }
+                    }
                     
                     // Safely extract claim type
-                    const claimType = typeof c === 'object' && c !== null && 'type' in c ? c.type : null;
+                    const claimType = typeof c === 'object' && c !== null && 'type' in c ? c.type : 
+                                     (typeof c === 'object' && c !== null && 'falsifiable' in c ? 
+                                      (c.falsifiable ? "falsifiable" : "unfalsifiable") : null);
                     
                     // Safely extract proposed evidence
                     const evidence = typeof c === 'object' && c !== null && 'proposed_evidence' in c ? c.proposed_evidence : null;
