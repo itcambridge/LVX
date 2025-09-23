@@ -155,11 +155,16 @@ export default function CreatePost() {
           <h2 className="font-medium">2) Claims</h2>
           {draft.s1 && (
             <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
-              <p className="italic">{draft.s1.reflection}</p>
+              <p className="italic">{typeof draft.s1.reflection === 'string' ? draft.s1.reflection : "I understand your concerns."}</p>
               <ul className="list-disc pl-5 mt-2">
                 {Array.isArray(draft.s1.grievances) ? 
                   draft.s1.grievances.map((g: any, i: number) => (
-                    <li key={i}>{typeof g === 'string' ? g : g.text} {g.emotion ? `(${g.emotion})` : ""}</li>
+                    <li key={i}>
+                      {typeof g === 'string' ? g : 
+                       typeof g === 'object' && g !== null && 'text' in g ? g.text : 
+                       "Grievance details unavailable"}
+                      {typeof g === 'object' && g !== null && 'emotion' in g && g.emotion ? ` (${g.emotion})` : ""}
+                    </li>
                   )) : 
                   <li>Grievance information not available in expected format</li>
                 }
@@ -172,26 +177,41 @@ export default function CreatePost() {
               <p className="font-medium mb-2">Generated Claims:</p>
               <ul className="list-disc pl-5">
                 {Array.isArray(draft.s2.claims) ? 
-                  draft.s2.claims.map((c: any, i: number) => (
-                    <li key={i} className="mb-1">
-                      <span className="font-medium">{c.claim}</span>
-                      {c.type && <span className="ml-1 text-xs bg-blue-100 px-1 py-0.5 rounded">{c.type}</span>}
-                      {c.proposed_evidence && Array.isArray(c.proposed_evidence) && c.proposed_evidence.length > 0 && (
-                        <div className="ml-4 mt-1 text-xs text-gray-600">
-                          <p>Proposed evidence:</p>
-                          <ul className="list-disc pl-4">
-                            {c.proposed_evidence.map((e: string, j: number) => (
-                              <li key={j}>{e}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </li>
-                  )) : 
+                  draft.s2.claims.map((c: any, i: number) => {
+                    // Safely extract claim text
+                    const claimText = typeof c === 'string' ? c : 
+                                     (typeof c === 'object' && c !== null && 'claim' in c ? c.claim : 
+                                     "Claim details unavailable");
+                    
+                    // Safely extract claim type
+                    const claimType = typeof c === 'object' && c !== null && 'type' in c ? c.type : null;
+                    
+                    // Safely extract proposed evidence
+                    const evidence = typeof c === 'object' && c !== null && 'proposed_evidence' in c ? c.proposed_evidence : null;
+                    
+                    return (
+                      <li key={i} className="mb-1">
+                        <span className="font-medium">{claimText}</span>
+                        {claimType && (
+                          <span className="ml-1 text-xs bg-blue-100 px-1 py-0.5 rounded">{claimType}</span>
+                        )}
+                        {evidence && Array.isArray(evidence) && evidence.length > 0 && (
+                          <div className="ml-4 mt-1 text-xs text-gray-600">
+                            <p>Proposed evidence:</p>
+                            <ul className="list-disc pl-4">
+                              {evidence.map((e: any, j: number) => (
+                                <li key={j}>{typeof e === 'string' ? e : JSON.stringify(e)}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  }) : 
                   <li>No claims generated yet</li>
                 }
               </ul>
-              {draft.s2.evidence_request && (
+              {draft.s2 && typeof draft.s2.evidence_request === 'string' && (
                 <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
               )}
             </div>
@@ -215,11 +235,25 @@ export default function CreatePost() {
             <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
               <p className="font-medium">Claims:</p>
               <ul className="list-disc pl-5">
-                {draft.s2.claims.map((c: any, i: number) => (
-                  <li key={i}>{c.claim} ({c.type})</li>
-                ))}
+                {Array.isArray(draft.s2.claims) ? 
+                  draft.s2.claims.map((c: any, i: number) => {
+                    // Safely extract claim text and type
+                    const claimText = typeof c === 'string' ? c : 
+                                     (typeof c === 'object' && c !== null && 'claim' in c ? c.claim : 
+                                     "Claim details unavailable");
+                    
+                    const claimType = typeof c === 'object' && c !== null && 'type' in c ? c.type : "falsifiable";
+                    
+                    return (
+                      <li key={i}>{claimText} ({claimType})</li>
+                    );
+                  }) : 
+                  <li>No claims available</li>
+                }
               </ul>
-              <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
+              {typeof draft.s2.evidence_request === 'string' && (
+                <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
+              )}
             </div>
           )}
           <button 
