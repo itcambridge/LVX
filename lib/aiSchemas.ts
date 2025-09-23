@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+// Existing schemas
 export const grievances_v1 = z.object({
   reflection: z.string(),
   grievances: z.array(z.object({
@@ -88,3 +89,45 @@ export const scores_v1 = z.object({
   flagged: z.array(z.object({ phrase: z.string(), reason: z.string() })).optional(),
   meets_thresholds: z.boolean()
 });
+
+// Helper function to convert Zod schema to JSON Schema for OpenAI
+export function zodToJsonSchema(zodSchema: z.ZodType<any>) {
+  // This is a simplified conversion - for production you might want a more robust solution
+  const jsonSchema: any = { type: "object", properties: {}, required: [] };
+  
+  // Extract properties from Zod schema
+  if (zodSchema instanceof z.ZodObject) {
+    const shape = (zodSchema as any)._def.shape();
+    
+    for (const [key, value] of Object.entries(shape)) {
+      if (value instanceof z.ZodString) {
+        jsonSchema.properties[key] = { type: "string" };
+      } else if (value instanceof z.ZodNumber) {
+        jsonSchema.properties[key] = { type: "number" };
+      } else if (value instanceof z.ZodBoolean) {
+        jsonSchema.properties[key] = { type: "boolean" };
+      } else if (value instanceof z.ZodArray) {
+        jsonSchema.properties[key] = { 
+          type: "array",
+          items: value._def.type instanceof z.ZodObject 
+            ? zodToJsonSchema(value._def.type)
+            : { type: "string" }
+        };
+      } else if (value instanceof z.ZodObject) {
+        jsonSchema.properties[key] = zodToJsonSchema(value);
+      } else if (value instanceof z.ZodEnum) {
+        jsonSchema.properties[key] = { 
+          type: "string", 
+          enum: value._def.values
+        };
+      }
+      
+      // Check if property is required
+      if (!(value instanceof z.ZodOptional)) {
+        jsonSchema.required.push(key);
+      }
+    }
+  }
+  
+  return jsonSchema;
+}

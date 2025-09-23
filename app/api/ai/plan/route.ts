@@ -1,152 +1,91 @@
 import { NextResponse } from "next/server";
-import { chatJSON } from "@/lib/aiClient";
+import { chatWithTools, chatText } from "@/lib/aiClient";
 import * as P from "@/lib/aiPrompts";
-import { z } from "zod";
 import {
-  grievances_v1, claims_v1, map_v1, goals_v1, plans_v1, tasks_v1, post_v1, scores_v1
+  grievances_v1, claims_v1, map_v1, goals_v1, plans_v1, tasks_v1, post_v1, scores_v1, zodToJsonSchema
 } from "@/lib/aiSchemas";
 
+// Define stage configurations with schemas and validators
 const stageMap = [
-  { key: "s1", prompt: P.P_STAGE1, schema: grievances_v1 },
-  { key: "s2", prompt: P.P_STAGE2, schema: claims_v1 },
-  { key: "s3", prompt: P.P_STAGE3, schema: map_v1 },
-  { key: "s4", prompt: P.P_STAGE4, schema: goals_v1 },
-  { key: "s5", prompt: P.P_STAGE5, schema: plans_v1 },
-  { key: "s6", prompt: P.P_STAGE6, schema: tasks_v1 },
-  { key: "s7", prompt: P.P_STAGE7, schema: post_v1 },
-  { key: "s8score", prompt: P.P_STAGE8_SCORE, schema: scores_v1 },
-  { key: "s8rewrite", prompt: P.P_STAGE8_REWRITE, schema: null }
+  { 
+    key: "s1", 
+    prompt: P.P_STAGE1, 
+    schema: zodToJsonSchema(grievances_v1),
+    validator: grievances_v1,
+    toolName: "process_grievances"
+  },
+  { 
+    key: "s2", 
+    prompt: P.P_STAGE2, 
+    schema: zodToJsonSchema(claims_v1),
+    validator: claims_v1,
+    toolName: "process_claims"
+  },
+  { 
+    key: "s3", 
+    prompt: P.P_STAGE3, 
+    schema: zodToJsonSchema(map_v1),
+    validator: map_v1,
+    toolName: "process_stakeholder_map"
+  },
+  { 
+    key: "s4", 
+    prompt: P.P_STAGE4, 
+    schema: zodToJsonSchema(goals_v1),
+    validator: goals_v1,
+    toolName: "process_smart_goals"
+  },
+  { 
+    key: "s5", 
+    prompt: P.P_STAGE5, 
+    schema: zodToJsonSchema(plans_v1),
+    validator: plans_v1,
+    toolName: "process_plan_options"
+  },
+  { 
+    key: "s6", 
+    prompt: P.P_STAGE6, 
+    schema: zodToJsonSchema(tasks_v1),
+    validator: tasks_v1,
+    toolName: "process_task_board"
+  },
+  { 
+    key: "s7", 
+    prompt: P.P_STAGE7, 
+    schema: zodToJsonSchema(post_v1),
+    validator: post_v1,
+    toolName: "process_nvc_post"
+  },
+  { 
+    key: "s8score", 
+    prompt: P.P_STAGE8_SCORE, 
+    schema: zodToJsonSchema(scores_v1),
+    validator: scores_v1,
+    toolName: "process_tone_score"
+  },
+  { 
+    key: "s8rewrite", 
+    prompt: P.P_STAGE8_REWRITE, 
+    schema: null,
+    validator: null,
+    toolName: null
+  }
 ];
 
-// Transform functions to fix common response format issues
-const transformers = {
-  s1: (data: any) => {
-    // Fix for stage 1 (grievances)
-    if (!data) return { reflection: "I understand your concerns.", grievances: [] };
-    
-    // Ensure reflection exists
-    if (!data.reflection) {
-      data.reflection = "I understand your concerns.";
-    }
-    
-    // Fix grievances if it's not an array
-    if (!Array.isArray(data.grievances)) {
-      // If it's an object with numbered keys, convert to array
-      if (data.grievances && typeof data.grievances === 'object') {
-        const grievancesArray = [];
-        for (const key in data.grievances) {
-          if (data.grievances[key]) {
-            // If it's already an object with text, use it
-            if (typeof data.grievances[key] === 'object' && data.grievances[key].text) {
-              grievancesArray.push(data.grievances[key]);
-            } else {
-              // Otherwise, create a new object with the value as text
-              grievancesArray.push({ text: String(data.grievances[key]) });
-            }
-          }
-        }
-        data.grievances = grievancesArray;
-      } else {
-        // Default to empty array if we can't convert
-        data.grievances = [];
-      }
-    }
-    
-    // Ensure at least one grievance
-    if (data.grievances.length === 0) {
-      data.grievances.push({ text: "Concern about the situation." });
-    }
-    
-    return data;
+// Fallback responses for different stages
+const fallbacks = {
+  s1: { 
+    reflection: "I understand your concerns.", 
+    grievances: [{ text: "The system encountered an error processing your input." }] 
   },
-  
-  s2: (data: any) => {
-    // Fix for stage 2 (claims)
-    console.log("Transforming stage 2 data:", JSON.stringify(data).substring(0, 200) + "...");
-    
-    // Create a default structure if data is missing
-    if (!data) {
-      return {
-        claims: [{ 
-          claim: "The current situation requires further analysis.", 
-          type: "falsifiable" 
-        }],
-        evidence_request: "Please provide factual information about the current situation."
-      };
-    }
-    
-    // Handle the case where the API returns a completely different structure
-    const claims = [];
-    
-    // Try to extract claims from various possible structures
-    if (data.grievances && data.grievances.claims && Array.isArray(data.grievances.claims)) {
-      // Handle the specific structure where claims are nested under grievances.claims
-      console.log("Found claims under grievances.claims");
-      data.grievances.claims.forEach((claim: any) => {
-        if (typeof claim === 'string') {
-          claims.push({ claim, type: "falsifiable" });
-        } else if (claim && typeof claim === 'object') {
-          claims.push({
-            claim: claim.claim || "Claim requires clarification",
-            type: claim.type || "falsifiable",
-            proposed_evidence: claim.proposed_evidence || undefined
-          });
-        }
-      });
-    } else if (data.falsifiable_claims && Array.isArray(data.falsifiable_claims)) {
-      // If we have falsifiable_claims array
-      data.falsifiable_claims.forEach((claim: any) => {
-        if (typeof claim === 'string') {
-          claims.push({ claim, type: "falsifiable" });
-        } else if (claim && typeof claim === 'object' && claim.claim) {
-          claims.push({ 
-            claim: claim.claim, 
-            type: "falsifiable",
-            proposed_evidence: claim.proposed_evidence || undefined
-          });
-        }
-      });
-    } else if (data.claims && Array.isArray(data.claims)) {
-      // If we already have a claims array, make sure each item has the right structure
-      data.claims.forEach((claim: any) => {
-        if (typeof claim === 'string') {
-          claims.push({ claim, type: "falsifiable" });
-        } else if (claim && typeof claim === 'object') {
-          claims.push({
-            claim: claim.claim || "Claim requires clarification",
-            type: claim.type || "falsifiable",
-            proposed_evidence: claim.proposed_evidence || undefined
-          });
-        }
-      });
-    } else if (data.grievances && Array.isArray(data.grievances)) {
-      // Convert grievances to claims if that's all we have
-      data.grievances.forEach((grievance: any) => {
-        const text = typeof grievance === 'string' ? grievance : 
-                    (grievance && grievance.text ? grievance.text : "Grievance requires clarification");
-        claims.push({ 
-          claim: `${text} is a concern that needs to be addressed.`, 
-          type: "falsifiable" 
-        });
-      });
-    }
-    
-    // Ensure we have at least one claim
-    if (claims.length === 0) {
-      claims.push({ 
-        claim: "The situation requires further analysis to identify specific claims.", 
-        type: "falsifiable" 
-      });
-    }
-    
-    // Create evidence request if missing
-    const evidence_request = data.evidence_request || 
-                            "Please provide factual information, statistics, or case studies related to these claims.";
-    
-    return { claims, evidence_request };
+  s2: {
+    claims: [{ 
+      claim: "The current situation requires further analysis.", 
+      type: "falsifiable" 
+    }],
+    evidence_request: "Please provide factual information about the current situation."
   },
-  
-  // Add other transformers as needed for other stages
+  // Add fallbacks for other stages as needed
 };
 
 export async function POST(req: Request) {
@@ -157,81 +96,46 @@ export async function POST(req: Request) {
 
     console.log(`Processing stage ${stage} with input:`, typeof input === "string" ? input : JSON.stringify(input).substring(0, 100) + "...");
     
-    const raw = await chatJSON(system, typeof input === "string" ? input : JSON.stringify(input));
-    console.log(`Raw response for stage ${stage}:`, raw);
-    
     try {
-      // Parse the raw JSON
-      let parsedData;
-      try {
-        // Attempt to sanitize the JSON string before parsing
-        const sanitizedRaw = typeof raw === 'string' 
-          ? raw.replace(/[\u0000-\u001F\u007F-\u009F\u2000-\u200F\u2028-\u202F\uFFF0-\uFFFF]/g, '')
-          : raw;
-        
-        parsedData = JSON.parse(sanitizedRaw);
-      } catch (parseError) {
-        console.error("JSON parse error:", parseError);
-        
-        // Create a fallback response based on the stage
-        let fallbackData;
-        if (stage === 's1') {
-          fallbackData = { 
-            reflection: "I understand your concerns.", 
-            grievances: [{ text: "The system encountered an error processing your input." }] 
-          };
-        } else if (stage === 's2') {
-          fallbackData = {
-            claims: [{ 
-              claim: "The current situation requires further analysis.", 
-              type: "falsifiable" 
-            }],
-            evidence_request: "Please provide factual information about the current situation."
-          };
-        } else {
-          // Generic fallback for other stages
-          fallbackData = { error: "Failed to parse response", stage };
-        }
-        
-        // Apply transformer if available
-        if (transformers[stage as keyof typeof transformers]) {
-          fallbackData = transformers[stage as keyof typeof transformers](fallbackData);
-        }
-        
-        // Return the fallback data
+      let result;
+      
+      // Special handling for rewrite stage which doesn't use tool calling
+      if (stage === "s8rewrite") {
+        result = { markdown: await chatText(system + "\n" + item.prompt, typeof input === "string" ? input : JSON.stringify(input)) };
+      } else {
+        // Use tool calling for structured output
+        result = await chatWithTools(
+          system + "\n" + item.prompt, 
+          typeof input === "string" ? input : JSON.stringify(input),
+          item.schema,
+          item.toolName!
+        );
+      }
+      
+      // Validate against Zod schema if available
+      if (item.validator) {
+        const validated = item.validator.parse(result);
+        return NextResponse.json({ ok: true, data: validated });
+      } else {
+        return NextResponse.json({ ok: true, data: result });
+      }
+    } catch (e: any) {
+      console.error(`Error in stage ${stage}:`, e);
+      
+      // Use fallback response if available
+      const fallback = fallbacks[stage as keyof typeof fallbacks];
+      if (fallback) {
         return NextResponse.json({ 
           ok: true, 
-          data: fallbackData,
-          warning: "Used fallback data due to parsing error"
+          data: fallback,
+          warning: "Used fallback data due to processing error"
         });
-      }
-      
-      // Apply transformer if available for this stage
-      if (transformers[stage as keyof typeof transformers]) {
-        parsedData = transformers[stage as keyof typeof transformers](parsedData);
-      }
-      
-      // Validate against schema
-      const parsed = item.schema ? item.schema.parse(parsedData) : { markdown: raw };
-      return NextResponse.json({ ok: true, data: parsed });
-    } catch (e: any) {
-      console.error(`Validation error for stage ${stage}:`, e);
-      
-      // Return detailed error information without trying to parse raw again
-      let safeData;
-      try {
-        // Only attempt to parse if it's a string and we haven't already tried
-        safeData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      } catch (parseError) {
-        // If parsing fails, just use a safe representation
-        safeData = { error: "Unparseable data" };
       }
       
       return NextResponse.json({ 
         ok: false, 
-        error: e?.errors || e?.message || "Validation error", 
-        raw: typeof raw === 'string' ? raw.substring(0, 500) + "..." : "Non-string response",
-        parsedData: safeData
+        error: e?.message || "Processing error",
+        details: e?.errors || e
       }, { status: 422 });
     }
   } catch (e: any) {

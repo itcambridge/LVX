@@ -7,9 +7,17 @@ interface Source {
 }
 
 export async function POST(req: Request) {
-  const { claims } = await req.json();
-  const data = await researchClaims(claims || []);
-  // Normalize to {sources:[{label,url}]}
-  const sources: Source[] = []; // TODO shape from data
-  return NextResponse.json({ ok: true, sources });
+  try {
+    const { claims } = await req.json();
+    const data = await researchClaims(claims || []);
+    // Normalize to {sources:[{label,url}]}
+    const sources: Source[] = []; // TODO shape from data
+    return NextResponse.json({ ok: true, sources });
+  } catch (error: any) {
+    console.error("Research error:", error);
+    return NextResponse.json({ 
+      ok: false, 
+      error: error.message || "Failed to research claims"
+    }, { status: 500 });
+  }
 }

@@ -7,37 +7,99 @@ export const openai = new OpenAI({
 });
 
 /**
- * Sanitizes a JSON string to remove problematic characters
- * @param jsonString The JSON string to sanitize
- * @returns Sanitized JSON string
+ * Makes a request to OpenAI API using tool calling for structured outputs
+ * @param system The system prompt
+ * @param user The user input
+ * @param schema The JSON schema for the expected output
+ * @param toolName The name of the tool to call
+ * @returns Validated response from the API
  */
-function sanitizeJsonString(jsonString: string): string {
-  if (typeof jsonString !== 'string') return '{}';
-  
+export async function chatWithTools(system: string, user: string, schema: any, toolName: string) {
   try {
-    // Remove control characters and other problematic Unicode
-    const sanitized = jsonString
-      .replace(/[\u0000-\u001F\u007F-\u009F\u2000-\u200F\u2028-\u202F\uFFF0-\uFFFF]/g, '')
-      // Fix common JSON syntax errors
-      .replace(/,\s*}/g, '}')  // Remove trailing commas in objects
-      .replace(/,\s*\]/g, ']') // Remove trailing commas in arrays
-      .replace(/([^\\])\\([^"\\/bfnrtu])/g, '$1\\\\$2'); // Escape backslashes properly
+    // Validate API key
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not set");
+      throw new Error("API key not configured");
+    }
+
+    // Make the API request with tool calling
+    console.log(`Making OpenAI request with tool ${toolName}`);
     
-    // Validate by parsing and re-stringifying
-    const parsed = JSON.parse(sanitized);
-    return JSON.stringify(parsed);
-  } catch (e) {
-    // If sanitization fails, return the original string
-    // The calling code will handle the parsing error
-    return jsonString;
+    const res = await openai.chat.completions.create({
+      model: "gpt-4-turbo", // More capable for structured outputs
+      messages: [
+        { role: "system", content: system }, 
+        { role: "user", content: user }
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: toolName,
+          description: `Process the ${toolName} stage of the debate algorithm`,
+          parameters: schema
+        }
+      }],
+      tool_choice: { type: "function", function: { name: toolName } },
+      temperature: 0.7,
+      max_tokens: 1500
+    });
+
+    // Extract the tool call response
+    const toolCalls = res.choices[0]?.message?.tool_calls;
+    if (!toolCalls || toolCalls.length === 0) {
+      console.error("No tool calls in response");
+      throw new Error("Invalid API response format");
+    }
+
+    // Parse the function arguments
+    const functionCall = toolCalls[0];
+    // Handle different types of tool calls (function or custom)
+    if (functionCall.type === 'function') {
+      return JSON.parse(functionCall.function.arguments);
+    } else {
+      console.error("Unexpected tool call type:", functionCall.type);
+      throw new Error("Unsupported tool call type");
+    }
+  } catch (error: any) {
+    // Handle API errors
+    console.error("OpenAI API error:", error.message || error);
+    throw error;
   }
 }
 
 /**
- * Makes a request to OpenAI API for JSON-formatted chat completion
+ * Fallback for the rewrite stage which doesn't return structured JSON
  * @param system The system prompt
  * @param user The user input
- * @returns JSON string response from the API
+ * @returns Raw text response from the API
+ */
+export async function chatText(system: string, user: string) {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not set");
+      throw new Error("API key not configured");
+    }
+
+    const res = await openai.chat.completions.create({
+      model: "gpt-4-turbo",
+      messages: [
+        { role: "system", content: system }, 
+        { role: "user", content: user }
+      ],
+      temperature: 0.7,
+      max_tokens: 1500
+    });
+
+    return res.choices[0]?.message?.content || "";
+  } catch (error: any) {
+    console.error("OpenAI API error:", error.message || error);
+    throw error;
+  }
+}
+
+/**
+ * Legacy function for backward compatibility
+ * @deprecated Use chatWithTools instead
  */
 export async function chatJSON(system: string, user: string) {
   try {
@@ -52,39 +114,28 @@ export async function chatJSON(system: string, user: string) {
       });
     }
 
-    // Make the API request
+    console.log("WARNING: Using deprecated chatJSON function. Consider migrating to chatWithTools.");
     console.log("Making OpenAI request with system prompt:", system.substring(0, 50) + "...");
     
-    // Add explicit instructions to return valid JSON
-    const enhancedSystem = `${system}\n\nIMPORTANT: Your response MUST be valid JSON. Ensure all strings are properly quoted and escaped.`;
-    
     const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // or your chosen model
+      model: "gpt-4-turbo", // Upgraded from gpt-4o-mini
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: enhancedSystem }, 
+        { role: "system", content: system }, 
         { role: "user", content: user }
       ],
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 1500
     });
 
-    // Extract and validate the response
+    // Extract the response
     const content = res.choices[0]?.message?.content;
     if (!content) {
       console.error("Empty response from OpenAI");
       return "{}";
     }
 
-    // Try to sanitize the JSON string
-    try {
-      const sanitized = sanitizeJsonString(content);
-      return sanitized;
-    } catch (sanitizeError) {
-      console.error("Failed to sanitize JSON:", sanitizeError);
-      // Return the original content if sanitization fails
-      return content;
-    }
+    return content;
   } catch (error: any) {
     // Handle API errors
     console.error("OpenAI API error:", error.message || error);
