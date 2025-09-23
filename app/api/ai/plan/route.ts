@@ -59,6 +59,79 @@ const transformers = {
     
     return data;
   },
+  
+  s2: (data: any) => {
+    // Fix for stage 2 (claims)
+    console.log("Transforming stage 2 data:", JSON.stringify(data).substring(0, 200) + "...");
+    
+    // Create a default structure if data is missing
+    if (!data) {
+      return {
+        claims: [{ 
+          claim: "The current situation requires further analysis.", 
+          type: "falsifiable" 
+        }],
+        evidence_request: "Please provide factual information about the current situation."
+      };
+    }
+    
+    // Handle the case where the API returns a completely different structure
+    const claims = [];
+    
+    // Try to extract claims from various possible structures
+    if (data.falsifiable_claims && Array.isArray(data.falsifiable_claims)) {
+      // If we have falsifiable_claims array
+      data.falsifiable_claims.forEach((claim: any) => {
+        if (typeof claim === 'string') {
+          claims.push({ claim, type: "falsifiable" });
+        } else if (claim && typeof claim === 'object' && claim.claim) {
+          claims.push({ 
+            claim: claim.claim, 
+            type: "falsifiable",
+            proposed_evidence: claim.proposed_evidence || undefined
+          });
+        }
+      });
+    } else if (data.claims && Array.isArray(data.claims)) {
+      // If we already have a claims array, make sure each item has the right structure
+      data.claims.forEach((claim: any) => {
+        if (typeof claim === 'string') {
+          claims.push({ claim, type: "falsifiable" });
+        } else if (claim && typeof claim === 'object') {
+          claims.push({
+            claim: claim.claim || "Claim requires clarification",
+            type: claim.type || "falsifiable",
+            proposed_evidence: claim.proposed_evidence || undefined
+          });
+        }
+      });
+    } else if (data.grievances && Array.isArray(data.grievances)) {
+      // Convert grievances to claims if that's all we have
+      data.grievances.forEach((grievance: any) => {
+        const text = typeof grievance === 'string' ? grievance : 
+                    (grievance && grievance.text ? grievance.text : "Grievance requires clarification");
+        claims.push({ 
+          claim: `${text} is a concern that needs to be addressed.`, 
+          type: "falsifiable" 
+        });
+      });
+    }
+    
+    // Ensure we have at least one claim
+    if (claims.length === 0) {
+      claims.push({ 
+        claim: "The situation requires further analysis to identify specific claims.", 
+        type: "falsifiable" 
+      });
+    }
+    
+    // Create evidence request if missing
+    const evidence_request = data.evidence_request || 
+                            "Please provide factual information, statistics, or case studies related to these claims.";
+    
+    return { claims, evidence_request };
+  },
+  
   // Add other transformers as needed for other stages
 };
 

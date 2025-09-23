@@ -157,18 +157,52 @@ export default function CreatePost() {
             <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
               <p className="italic">{draft.s1.reflection}</p>
               <ul className="list-disc pl-5 mt-2">
-                {draft.s1.grievances.map((g: any, i: number) => (
-                  <li key={i}>{g.text} {g.emotion ? `(${g.emotion})` : ""}</li>
-                ))}
+                {Array.isArray(draft.s1.grievances) ? 
+                  draft.s1.grievances.map((g: any, i: number) => (
+                    <li key={i}>{typeof g === 'string' ? g : g.text} {g.emotion ? `(${g.emotion})` : ""}</li>
+                  )) : 
+                  <li>Grievance information not available in expected format</li>
+                }
               </ul>
             </div>
           )}
+          
+          {draft.s2 && (
+            <div className="mb-4 p-3 bg-blue-50 rounded text-sm">
+              <p className="font-medium mb-2">Generated Claims:</p>
+              <ul className="list-disc pl-5">
+                {Array.isArray(draft.s2.claims) ? 
+                  draft.s2.claims.map((c: any, i: number) => (
+                    <li key={i} className="mb-1">
+                      <span className="font-medium">{c.claim}</span>
+                      {c.type && <span className="ml-1 text-xs bg-blue-100 px-1 py-0.5 rounded">{c.type}</span>}
+                      {c.proposed_evidence && Array.isArray(c.proposed_evidence) && c.proposed_evidence.length > 0 && (
+                        <div className="ml-4 mt-1 text-xs text-gray-600">
+                          <p>Proposed evidence:</p>
+                          <ul className="list-disc pl-4">
+                            {c.proposed_evidence.map((e: string, j: number) => (
+                              <li key={j}>{e}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </li>
+                  )) : 
+                  <li>No claims generated yet</li>
+                }
+              </ul>
+              {draft.s2.evidence_request && (
+                <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
+              )}
+            </div>
+          )}
+          
           <button 
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => runStage(2, draft.s1)}
             disabled={loading === "stage2" || planner.stage !== 2}
           >
-            {loading === "stage2" ? "Processing..." : "Generate Claims"}
+            {loading === "stage2" ? "Processing..." : draft.s2 ? "Regenerate Claims" : "Generate Claims"}
           </button>
         </section>
       )}
