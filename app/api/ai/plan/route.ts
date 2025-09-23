@@ -79,7 +79,21 @@ const transformers = {
     const claims = [];
     
     // Try to extract claims from various possible structures
-    if (data.falsifiable_claims && Array.isArray(data.falsifiable_claims)) {
+    if (data.grievances && data.grievances.claims && Array.isArray(data.grievances.claims)) {
+      // Handle the specific structure where claims are nested under grievances.claims
+      console.log("Found claims under grievances.claims");
+      data.grievances.claims.forEach((claim: any) => {
+        if (typeof claim === 'string') {
+          claims.push({ claim, type: "falsifiable" });
+        } else if (claim && typeof claim === 'object') {
+          claims.push({
+            claim: claim.claim || "Claim requires clarification",
+            type: claim.type || "falsifiable",
+            proposed_evidence: claim.proposed_evidence || undefined
+          });
+        }
+      });
+    } else if (data.falsifiable_claims && Array.isArray(data.falsifiable_claims)) {
       // If we have falsifiable_claims array
       data.falsifiable_claims.forEach((claim: any) => {
         if (typeof claim === 'string') {
