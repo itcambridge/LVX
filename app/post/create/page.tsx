@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useAiPlanner } from "@/hooks/useAiPlanner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const ToneMeter = dynamic(() => import("@/components/ai/tone-meter"), { ssr: false });
 
@@ -13,14 +14,21 @@ export default function CreatePost() {
   // Render the same thing on server and first client paint → no hydration mismatch
   if (!mounted) return null; // or a tiny skeleton
 
-  return <CreatePostInner />;
+  return (
+    <ErrorBoundary>
+      <CreatePostInner />
+    </ErrorBoundary>
+  );
 }
 
 // ---- Inner: all hooks live here; order is stable on every render ----
 function CreatePostInner() {
   const [projectId, setProjectId] = useState<string>("temp-id");
+  const [ready, setReady] = useState(false);
+  
   useEffect(() => {
     setProjectId(crypto.randomUUID()); // client-only
+    setReady(true);
   }, []);
 
   const planner = useAiPlanner(projectId);
@@ -161,7 +169,7 @@ function CreatePostInner() {
         <button 
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => runStage(1, vent)}
-          disabled={!vent.trim() || loading === "stage1" || planner.stage !== 1}
+          disabled={!ready || !vent.trim() || loading === "stage1" || planner.stage !== 1}
         >
           {loading === "stage1" ? "Processing..." : "Next"}
         </button>
@@ -251,7 +259,7 @@ function CreatePostInner() {
           <button 
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => runStage(2, draft.s1)}
-            disabled={loading === "stage2" || planner.stage !== 2}
+            disabled={!ready || loading === "stage2" || planner.stage !== 2}
           >
             {loading === "stage2" ? "Processing..." : draft.s2 ? "Regenerate Claims" : "Generate Claims"}
           </button>
@@ -290,7 +298,7 @@ function CreatePostInner() {
           <button 
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => runStage(3, draft.s2)}
-            disabled={loading === "stage3" || planner.stage !== 3}
+            disabled={!ready || loading === "stage3" || planner.stage !== 3}
           >
             {loading === "stage3" ? "Processing..." : "Map Stakeholders"}
           </button>
@@ -316,7 +324,7 @@ function CreatePostInner() {
           <button 
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => runStage(4, draft.s3)}
-            disabled={loading === "stage4" || planner.stage !== 4}
+            disabled={!ready || loading === "stage4" || planner.stage !== 4}
           >
             {loading === "stage4" ? "Processing..." : "Set Goals"}
           </button>
@@ -343,7 +351,7 @@ function CreatePostInner() {
           <button 
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => runStage(5, draft.s4)}
-            disabled={loading === "stage5" || planner.stage !== 5}
+            disabled={!ready || loading === "stage5" || planner.stage !== 5}
           >
             {loading === "stage5" ? "Processing..." : "Generate Plans"}
           </button>
@@ -369,7 +377,7 @@ function CreatePostInner() {
           <button 
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => runStage(6, draft.s5)}
-            disabled={loading === "stage6" || planner.stage !== 6}
+            disabled={!ready || loading === "stage6" || planner.stage !== 6}
           >
             {loading === "stage6" ? "Processing..." : "Create Tasks"}
           </button>
@@ -389,7 +397,7 @@ function CreatePostInner() {
           <button 
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => runStage(7, draft)}
-            disabled={loading === "stage7" || planner.stage !== 7}
+            disabled={!ready || loading === "stage7" || planner.stage !== 7}
           >
             {loading === "stage7" ? "Processing..." : "Generate Post"}
           </button>
@@ -416,7 +424,7 @@ function CreatePostInner() {
           <button 
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => runStage(8, finalMd)}
-            disabled={loading === "stage8" || !finalMd}
+            disabled={!ready || loading === "stage8" || !finalMd}
           >
             {loading === "stage8" ? "Processing..." : "Score / Rewrite"}
           </button>
@@ -431,7 +439,7 @@ function CreatePostInner() {
 
       {/* Publish (enabled only after Stage 8 reached) */}
       <button
-        disabled={planner.stage < 8 || !finalMd || loading === "publishing"}
+        disabled={!ready || planner.stage < 8 || !finalMd || loading === "publishing"}
         className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full mt-4"
         onClick={publish}
       >

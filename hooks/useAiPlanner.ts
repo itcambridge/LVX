@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 type Stage = 1|2|3|4|5|6|7|8;
 
@@ -7,12 +7,22 @@ export function useAiPlanner(projectId: string) {
   const [bundle, setBundle] = useState<any>({});
   const [scores, setScores] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const isMounted = useRef(true);
+  
+  // Set isMounted to false when component unmounts
+  useEffect(() => {
+    return () => { 
+      isMounted.current = false; 
+    };
+  }, []);
 
   /**
    * Call the AI API with error handling
    */
   async function call(stageKey: string, input: any) {
+    const ac = new AbortController();
     try {
+      if (!isMounted.current) return;
       setError(null);
       console.log(`Calling AI for stage ${stageKey} with input:`, input);
       
@@ -21,22 +31,30 @@ export function useAiPlanner(projectId: string) {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ stage: stageKey, input }) 
+        body: JSON.stringify({ stage: stageKey, input }),
+        signal: ac.signal
       });
       
       const j = await r.json();
       
       if (!j.ok) {
         console.error(`Error in stage ${stageKey}:`, j.error, "Raw:", j.raw);
-        setError(Array.isArray(j.error) ? j.error.map((e: any) => e.message).join(", ") : j.error);
+        if (isMounted.current) {
+          setError(Array.isArray(j.error) ? j.error.map((e: any) => e.message).join(", ") : j.error);
+        }
         throw new Error(j.error || "AI processing error");
       }
       
       return j.data;
     } catch (err: any) {
       console.error(`Error in stage ${stageKey}:`, err);
-      setError(err.message || "Failed to process this stage");
+      if (isMounted.current) {
+        setError(err.message || "Failed to process this stage");
+      }
       throw err;
+    } finally {
+      // Clean up the abort controller
+      ac.abort();
     }
   }
 
@@ -44,13 +62,17 @@ export function useAiPlanner(projectId: string) {
    * Save the current state to the database
    */
   async function save(partial: any, extra?: any) {
+    if (!isMounted.current) return;
+    
+    const ac = new AbortController();
     try {
       const response = await fetch("/api/projects/save-draft", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ projectId, stage, bundlePatch: partial, ...extra })
+        body: JSON.stringify({ projectId, stage, bundlePatch: partial, ...extra }),
+        signal: ac.signal
       });
       
       if (!response.ok) {
@@ -59,6 +81,8 @@ export function useAiPlanner(projectId: string) {
       }
     } catch (err: any) {
       console.error("Failed to save draft:", err);
+    } finally {
+      ac.abort();
     }
   }
 
