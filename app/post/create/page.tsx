@@ -6,6 +6,18 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const ToneMeter = dynamic(() => import("@/components/ai/tone-meter"), { ssr: false });
 
+// Helper function to safely convert any value to text
+function toText(v: any) {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object") {
+    if ("claim" in v && typeof v.claim === "string") return v.claim;
+    if ("text" in v && typeof v.text === "string") return v.text;
+    // last resort: readable JSON (avoid circular refs)
+    try { return JSON.stringify(v); } catch { return "[unprintable object]"; }
+  }
+  return String(v ?? "");
+}
+
 // ---- Wrapper: no hooks after the early return ----
 export default function CreatePost() {
   const [mounted, setMounted] = useState(false);
@@ -183,17 +195,25 @@ function CreatePostInner() {
             <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
               <p className="italic">{typeof draft.s1.reflection === 'string' ? draft.s1.reflection : "I understand your concerns."}</p>
               <ul className="list-disc pl-5 mt-2">
-                {Array.isArray(draft.s1.grievances) ? 
-                  draft.s1.grievances.map((g: any, i: number) => (
-                    <li key={i}>
-                      {typeof g === 'string' ? g : 
-                       typeof g === 'object' && g !== null && 'text' in g ? g.text : 
-                       "Grievance details unavailable"}
-                      {typeof g === 'object' && g !== null && 'emotion' in g && g.emotion ? ` (${g.emotion})` : ""}
-                    </li>
-                  )) : 
-                  <li>Grievance information not available in expected format</li>
-                }
+                {(() => {
+                  const g =
+                    Array.isArray(draft.s1?.grievances) ? draft.s1.grievances :
+                    Array.isArray(draft.s1?.grievances?.claims) ? draft.s1.grievances.claims :
+                    [];
+
+                  if (!g.length) {
+                    return <li>Grievance information not available in expected format</li>;
+                  }
+
+                  return g.map((item: any, i: number) => {
+                    const text = toText(item);
+                    const emotion =
+                      item && typeof item === "object" && "emotion" in item && item.emotion
+                        ? ` (${item.emotion})`
+                        : "";
+                    return <li key={i}>{text}{emotion}</li>;
+                  });
+                })()}
               </ul>
             </div>
           )}
@@ -203,52 +223,45 @@ function CreatePostInner() {
               <p className="font-medium mb-2">Generated Claims:</p>
               
               <ul className="list-disc pl-5">
-                {Array.isArray(draft.s2.claims) ? 
+                {Array.isArray(draft.s2?.claims) && draft.s2.claims.length ? (
                   draft.s2.claims.map((c: any, i: number) => {
-                    // Safely extract claim text with more detailed fallbacks
-                    let claimText = "Claim details unavailable";
-                    if (typeof c === 'string') {
-                      claimText = c;
-                    } else if (typeof c === 'object' && c !== null) {
-                      if ('claim' in c) {
-                        claimText = c.claim;
-                      } else if ('text' in c) {
-                        claimText = c.text;
-                      } else {
-                        // Use a stable representation instead of JSON.stringify
-                        claimText = "Complex claim object";
-                      }
-                    }
-                    
-                    // Safely extract claim type
-                    const claimType = typeof c === 'object' && c !== null && 'type' in c ? c.type : 
-                                     (typeof c === 'object' && c !== null && 'falsifiable' in c ? 
-                                      (c.falsifiable ? "falsifiable" : "unfalsifiable") : null);
-                    
-                    // Safely extract proposed evidence
-                    const evidence = typeof c === 'object' && c !== null && 'proposed_evidence' in c ? c.proposed_evidence : null;
-                    
+                    const claimText = toText(c);
+                    const claimType =
+                      c && typeof c === "object"
+                        ? (c.type ?? (typeof c.falsifiable === "boolean"
+                            ? (c.falsifiable ? "falsifiable" : "unfalsifiable")
+                            : null))
+                        : null;
+
+                    const evidence =
+                      c && typeof c === "object" && Array.isArray(c.proposed_evidence)
+                        ? c.proposed_evidence
+                        : null;
+
                     return (
                       <li key={i} className="mb-1">
                         <span className="font-medium">{claimText}</span>
                         {claimType && (
-                          <span className="ml-1 text-xs bg-blue-100 px-1 py-0.5 rounded">{claimType}</span>
+                          <span className="ml-1 text-xs bg-blue-100 px-1 py-0.5 rounded">
+                            {claimType}
+                          </span>
                         )}
-                        {evidence && Array.isArray(evidence) && evidence.length > 0 && (
+                        {evidence && evidence.length > 0 && (
                           <div className="ml-4 mt-1 text-xs text-gray-600">
                             <p>Proposed evidence:</p>
                             <ul className="list-disc pl-4">
                               {evidence.map((e: any, j: number) => (
-                                <li key={j}>{typeof e === 'string' ? e : "Complex evidence item"}</li>
+                                <li key={j}>{toText(e)}</li>
                               ))}
                             </ul>
                           </div>
                         )}
                       </li>
                     );
-                  }) : 
+                  })
+                ) : (
                   <li>No claims generated yet</li>
-                }
+                )}
               </ul>
               {draft.s2 && typeof draft.s2.evidence_request === 'string' && (
                 <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
@@ -274,14 +287,10 @@ function CreatePostInner() {
             <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
               <p className="font-medium">Claims:</p>
               <ul className="list-disc pl-5">
-                {Array.isArray(draft.s2.claims) ? 
+                {Array.isArray(draft.s2?.claims) && draft.s2.claims.length ? 
                   draft.s2.claims.map((c: any, i: number) => {
-                    // Safely extract claim text and type
-                    const claimText = typeof c === 'string' ? c : 
-                                     (typeof c === 'object' && c !== null && 'claim' in c ? c.claim : 
-                                     "Claim details unavailable");
-                    
-                    const claimType = typeof c === 'object' && c !== null && 'type' in c ? c.type : "falsifiable";
+                    const claimText = toText(c);
+                    const claimType = c && typeof c === "object" && "type" in c ? c.type : "falsifiable";
                     
                     return (
                       <li key={i}>{claimText} ({claimType})</li>
