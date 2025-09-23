@@ -1,28 +1,28 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useAiPlanner } from "@/hooks/useAiPlanner";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useAiPlanner } from "@/hooks/useAiPlanner";
 
-// Import ToneMeter as a client-side only component
 const ToneMeter = dynamic(() => import("@/components/ai/tone-meter"), { ssr: false });
 
-function CreatePost() {
-  // Use a mounted state to prevent rendering until client-side
+// ---- Wrapper: no hooks after the early return ----
+export default function CreatePost() {
   const [mounted, setMounted] = useState(false);
-  // Use a stable initial value and update it on the client side only
+  useEffect(() => setMounted(true), []);
+
+  // Render the same thing on server and first client paint → no hydration mismatch
+  if (!mounted) return null; // or a tiny skeleton
+
+  return <CreatePostInner />;
+}
+
+// ---- Inner: all hooks live here; order is stable on every render ----
+function CreatePostInner() {
   const [projectId, setProjectId] = useState<string>("temp-id");
-  
-  // Generate UUID only on the client side to avoid hydration mismatch
   useEffect(() => {
-    setMounted(true);
-    setProjectId(crypto.randomUUID());
+    setProjectId(crypto.randomUUID()); // client-only
   }, []);
-  
-  // Don't render anything until mounted on client
-  if (!mounted) {
-    return <div className="max-w-xl mx-auto p-4">Loading...</div>;
-  }
-  
+
   const planner = useAiPlanner(projectId);
   const [vent, setVent] = useState("");
   const [draft, setDraft] = useState<any>({});
@@ -197,8 +197,6 @@ function CreatePost() {
               <ul className="list-disc pl-5">
                 {Array.isArray(draft.s2.claims) ? 
                   draft.s2.claims.map((c: any, i: number) => {
-                    // Remove console.log to avoid client-side only code
-                    
                     // Safely extract claim text with more detailed fallbacks
                     let claimText = "Claim details unavailable";
                     if (typeof c === 'string') {
@@ -442,6 +440,3 @@ function CreatePost() {
     </div>
   );
 }
-
-// Export as client-side only component to avoid hydration mismatches
-export default dynamic(() => Promise.resolve(CreatePost), { ssr: false });
