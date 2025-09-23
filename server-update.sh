@@ -32,11 +32,37 @@ if ! grep -q "PERPLEXITY_API_KEY" .env.local; then
   echo "Please edit .env.local and replace 'your_perplexity_api_key_here' with your actual Perplexity API key"
 fi
 
+# Clear Next.js cache to ensure clean build
+echo "Clearing Next.js cache..."
+rm -rf .next
+
 # Build the application
+echo "Building application..."
 pnpm run build
 
+# Check for build errors
+if [ $? -ne 0 ]; then
+  echo "Build failed! Please check the logs above for errors."
+  exit 1
+fi
+
 # Restart the application (assuming PM2 is used)
+echo "Restarting application..."
 pm2 restart lvx
+
+# Tail the logs to check for startup errors
+echo "Checking logs for errors..."
+pm2 logs --lines 20 --nostream
+
+# Check for specific errors in the logs
+echo "Checking for specific errors..."
+if pm2 logs --lines 100 --nostream | grep -q "Unterminated string in JSON"; then
+  echo "WARNING: JSON parsing errors still detected in logs. The fixes may not have been applied correctly."
+  echo "Please check the application and logs for more details."
+else
+  echo "No JSON parsing errors detected in recent logs. The fixes appear to be working."
+fi
 
 echo "Server update complete!"
 echo "Please check the application to ensure it's working correctly."
+echo "If you encounter any issues, check the logs with: pm2 logs"
