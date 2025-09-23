@@ -225,6 +225,22 @@ function CreatePostInner() {
                     return <li>Grievance information not available in expected format</li>;
                   }
 
+                  // Special case: If we have a single grievance with a text property containing "[object Object]"
+                  if (g.length === 1 && typeof g[0]?.text === 'string' && g[0].text.includes('[object Object]')) {
+                    console.log("SPECIAL CASE: Found [object Object] in text property");
+                    // Split the text by commas and create fake claim objects
+                    const fakeClaimTexts = g[0].text.split(',');
+                    console.log("FAKE CLAIMS:", fakeClaimTexts);
+                    
+                    return fakeClaimTexts.map((text: string, i: number) => {
+                      // Replace [object Object] with "Claim #"
+                      const cleanedText = text.replace(/\[object Object\]/g, `Claim ${i+1}`);
+                      console.log(`CLEANED TEXT ${i}:`, cleanedText);
+                      return <li key={i}>{cleanedText}</li>;
+                    });
+                  }
+
+                  // Normal case: Process each item as before
                   return g.map((item: any, i: number) => {
                     console.log(`GRIEVANCE ITEM ${i}:`, JSON.stringify(item, null, 2));
                     const text = toText(item);
@@ -253,6 +269,32 @@ function CreatePostInner() {
                     return <li>No claims generated yet</li>;
                   }
                   
+                  // Special case: If we have claims with text containing "[object Object]"
+                  const hasObjectStringClaims = draft.s2.claims.some(
+                    (c: any) => typeof c === 'string' && c.includes('[object Object]')
+                  );
+                  
+                  if (hasObjectStringClaims) {
+                    console.log("SPECIAL CASE: Found [object Object] in claims");
+                    return draft.s2.claims.map((c: any, i: number) => {
+                      const claimText = typeof c === 'string' 
+                        ? c.replace(/\[object Object\]/g, `Claim ${i+1}`)
+                        : toText(c);
+                      
+                      console.log(`CLEANED CLAIM ${i}:`, claimText);
+                      
+                      return (
+                        <li key={i} className="mb-1">
+                          <span className="font-medium">{claimText}</span>
+                          <span className="ml-1 text-xs bg-blue-100 px-1 py-0.5 rounded">
+                            falsifiable
+                          </span>
+                        </li>
+                      );
+                    });
+                  }
+                  
+                  // Normal case: Process each claim as before
                   return draft.s2.claims.map((c: any, i: number) => {
                     console.log(`CLAIM ITEM ${i}:`, JSON.stringify(c, null, 2));
                     const claimText = toText(c);
