@@ -1,16 +1,28 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAiPlanner } from "@/hooks/useAiPlanner";
-import ToneMeter from "@/components/ai/tone-meter";
+import dynamic from "next/dynamic";
 
-export default function CreatePost() {
+// Import ToneMeter as a client-side only component
+const ToneMeter = dynamic(() => import("@/components/ai/tone-meter"), { ssr: false });
+
+function CreatePost() {
+  // Use a mounted state to prevent rendering until client-side
+  const [mounted, setMounted] = useState(false);
   // Use a stable initial value and update it on the client side only
   const [projectId, setProjectId] = useState<string>("temp-id");
   
   // Generate UUID only on the client side to avoid hydration mismatch
   useEffect(() => {
+    setMounted(true);
     setProjectId(crypto.randomUUID());
   }, []);
+  
+  // Don't render anything until mounted on client
+  if (!mounted) {
+    return <div className="max-w-xl mx-auto p-4">Loading...</div>;
+  }
+  
   const planner = useAiPlanner(projectId);
   const [vent, setVent] = useState("");
   const [draft, setDraft] = useState<any>({});
@@ -430,3 +442,6 @@ export default function CreatePost() {
     </div>
   );
 }
+
+// Export as client-side only component to avoid hydration mismatches
+export default dynamic(() => Promise.resolve(CreatePost), { ssr: false });
