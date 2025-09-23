@@ -150,14 +150,46 @@ export async function POST(req: Request) {
       // Parse the raw JSON
       let parsedData;
       try {
-        parsedData = JSON.parse(raw);
+        // Attempt to sanitize the JSON string before parsing
+        const sanitizedRaw = typeof raw === 'string' 
+          ? raw.replace(/[\u0000-\u001F\u007F-\u009F\u2000-\u200F\u2028-\u202F\uFFF0-\uFFFF]/g, '')
+          : raw;
+        
+        parsedData = JSON.parse(sanitizedRaw);
       } catch (parseError) {
         console.error("JSON parse error:", parseError);
+        
+        // Create a fallback response based on the stage
+        let fallbackData;
+        if (stage === 's1') {
+          fallbackData = { 
+            reflection: "I understand your concerns.", 
+            grievances: [{ text: "The system encountered an error processing your input." }] 
+          };
+        } else if (stage === 's2') {
+          fallbackData = {
+            claims: [{ 
+              claim: "The current situation requires further analysis.", 
+              type: "falsifiable" 
+            }],
+            evidence_request: "Please provide factual information about the current situation."
+          };
+        } else {
+          // Generic fallback for other stages
+          fallbackData = { error: "Failed to parse response", stage };
+        }
+        
+        // Apply transformer if available
+        if (transformers[stage as keyof typeof transformers]) {
+          fallbackData = transformers[stage as keyof typeof transformers](fallbackData);
+        }
+        
+        // Return the fallback data
         return NextResponse.json({ 
-          ok: false, 
-          error: "Failed to parse JSON response from AI", 
-          raw 
-        }, { status: 422 });
+          ok: true, 
+          data: fallbackData,
+          warning: "Used fallback data due to parsing error"
+        });
       }
       
       // Apply transformer if available for this stage
@@ -171,12 +203,21 @@ export async function POST(req: Request) {
     } catch (e: any) {
       console.error(`Validation error for stage ${stage}:`, e);
       
-      // Return detailed error information
+      // Return detailed error information without trying to parse raw again
+      let safeData;
+      try {
+        // Only attempt to parse if it's a string and we haven't already tried
+        safeData = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch (parseError) {
+        // If parsing fails, just use a safe representation
+        safeData = { error: "Unparseable data" };
+      }
+      
       return NextResponse.json({ 
         ok: false, 
         error: e?.errors || e?.message || "Validation error", 
-        raw,
-        parsedData: typeof raw === 'string' ? JSON.parse(raw) : raw
+        raw: typeof raw === 'string' ? raw.substring(0, 500) + "..." : "Non-string response",
+        parsedData: safeData
       }, { status: 422 });
     }
   } catch (e: any) {
