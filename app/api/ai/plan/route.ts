@@ -165,21 +165,35 @@ const fallbacks = {
       opponent: { points: [{ text: "Alternative viewpoints exist.", type: "value" }] }
     },
     financial_accountability: {
-      metrics: [{ name: "Cost-benefit ratio", baseline: "Unknown", target: "Positive" }],
+      metrics: [
+        { name: "Cost-benefit ratio", baseline: "Unknown", target: "Positive" },
+        { name: "Return on investment", baseline: "Unknown", target: "Positive" }
+      ],
       distribution: {
         costs: [{ stakeholder: "All parties", impact: "Varies" }],
         benefits: [{ stakeholder: "All parties", impact: "Varies" }]
       },
-      rules: { sunset: "To be determined", scale: "As appropriate" },
+      rules: { 
+        sunset: "To be determined", 
+        scale: "As appropriate" 
+      },
       unknowns: ["Specific financial impacts"]
     },
     solution_paths: {
-      paths: [{
-        name: "Simplified approach",
-        core_moves: ["Gather more information", "Consult stakeholders"],
-        guardrails: ["Ensure transparency", "Maintain ethical standards"],
-        trade_offs: ["Speed vs. thoroughness"]
-      }]
+      paths: [
+        {
+          name: "Simplified approach",
+          core_moves: ["Gather more information", "Consult stakeholders"],
+          guardrails: ["Ensure transparency", "Maintain ethical standards"],
+          trade_offs: ["Speed vs. thoroughness"]
+        },
+        {
+          name: "Alternative approach",
+          core_moves: ["Focus on key priorities", "Implement incremental changes"],
+          guardrails: ["Regular feedback loops", "Clear communication channels"],
+          trade_offs: ["Depth vs. breadth of implementation"]
+        }
+      ]
     },
     evidence_slots: {
       to_verify: [{ 

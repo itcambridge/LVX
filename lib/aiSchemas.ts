@@ -30,7 +30,7 @@ export const steelman_v1 = z.object({
 export const financial_accountability_v1 = z.object({
   metrics: z.array(z.object({
     name: z.string(),
-    baseline: z.string().nullable(),
+    baseline: z.string().nullable().optional(),
     target: z.string()
   })),
   distribution: z.object({
@@ -44,8 +44,8 @@ export const financial_accountability_v1 = z.object({
     }))
   }),
   rules: z.object({
-    sunset: z.string().nullable(),
-    scale: z.string().nullable()
+    sunset: z.union([z.string(), z.array(z.string())]).nullable().optional(),
+    scale: z.union([z.string(), z.array(z.string())]).nullable().optional()
   }),
   unknowns: z.array(z.string())
 });
@@ -56,7 +56,7 @@ export const solution_paths_v1 = z.object({
     core_moves: z.array(z.string()),
     guardrails: z.array(z.string()),
     trade_offs: z.array(z.string())
-  })).min(2).max(4)
+  })).min(1).max(4)
 });
 
 export const evidence_slots_v1 = z.object({
