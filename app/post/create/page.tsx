@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { ImageUpload } from "@/components/image-upload";
 import dynamic from "next/dynamic";
 
 const ToneMeter = dynamic(() => import("@/components/ai/tone-meter"), { ssr: false });
@@ -389,6 +390,12 @@ function CreatePostInner() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="mb-6">
+                  <ImageUpload 
+                    onImageUploaded={(url) => planner.setProjectImage(url)}
+                    className="mb-4"
+                  />
+                </div>
                 <div className="prose max-w-none">
                   {planner.output.bridge_story.paragraphs.map((paragraph: string, i: number) => (
                     <p key={i} className="mb-4">{paragraph}</p>

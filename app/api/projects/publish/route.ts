@@ -5,7 +5,7 @@ const s = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_P
 
 export async function POST(req: Request) {
   try {
-    const { projectId, title, tldr, body_markdown, to_verify_items } = await req.json();
+    const { projectId, title, tldr, body_markdown, to_verify_items, imageUrl } = await req.json();
     
     // First check if the project exists
     const { data: existingProject, error: checkError } = await s.from("projects")
@@ -38,6 +38,20 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: insertError }, { status: 500 });
       }
 
+      // If an image URL was provided, create a record in the project_images table
+      if (imageUrl) {
+        const { error: imageError } = await s.from("project_images").insert({
+          project_id: projectId,
+          image_url: imageUrl,
+          display_order: 1
+        });
+
+        if (imageError) {
+          console.error("Error creating project image:", imageError);
+          // Continue even if image creation fails
+        }
+      }
+
       // Return success after creating the project
       return NextResponse.json({ ok: true, created: true });
     }
@@ -61,6 +75,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error }, { status: 500 });
     }
     
+    // If an image URL was provided, update or create a record in the project_images table
+    if (imageUrl) {
+      // First check if an image already exists for this project
+      const { data: existingImages } = await s.from("project_images")
+        .select("id")
+        .eq("project_id", projectId)
+        .order("display_order", { ascending: true })
+        .limit(1);
+      
+      if (existingImages && existingImages.length > 0) {
+        // Update the existing image
+        const { error: updateImageError } = await s.from("project_images")
+          .update({ image_url: imageUrl })
+          .eq("id", existingImages[0].id);
+        
+        if (updateImageError) {
+          console.error("Error updating project image:", updateImageError);
+          // Continue even if image update fails
+        }
+      } else {
+        // Create a new image record
+        const { error: insertImageError } = await s.from("project_images").insert({
+          project_id: projectId,
+          image_url: imageUrl,
+          display_order: 1
+        });
+        
+        if (insertImageError) {
+          console.error("Error creating project image:", insertImageError);
+          // Continue even if image creation fails
+        }
+      }
+    }
+
     return NextResponse.json({ ok: true, updated: true });
   } catch (error: any) {
     console.error("Unexpected error:", error);

@@ -6,6 +6,7 @@ export function useAiPlanner(projectId: string) {
   const [loading, setLoading] = useState<boolean>(false);
   const [emphasis, setEmphasis] = useState<"efficiency" | "empathy" | "balanced">("balanced");
   const [version, setVersion] = useState<number>(1);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const isMounted = useRef(true);
   
   // Set isMounted to false when component unmounts
@@ -88,7 +89,8 @@ export function useAiPlanner(projectId: string) {
           bundlePatch,
           version,
           emphasis,
-          stage: "oneshot" // For compatibility with existing code
+          stage: "oneshot", // For compatibility with existing code
+          imageUrl: imageUrl
         })
       });
       
@@ -180,7 +182,8 @@ export function useAiPlanner(projectId: string) {
           title: output.bridge_story.thin_edge,
           tldr: output.bridge_story.paragraphs[0],
           body_markdown: output.bridge_story.paragraphs.join("\n\n"),
-          to_verify_items: output.evidence_slots.to_verify
+          to_verify_items: output.evidence_slots.to_verify,
+          imageUrl: imageUrl
         })
       });
       
@@ -245,16 +248,26 @@ export function useAiPlanner(projectId: string) {
     }
   }
 
+  /**
+   * Set the image URL for the project
+   */
+  function setProjectImage(url: string) {
+    if (!isMounted.current) return;
+    setImageUrl(url);
+  }
+
   return {
     output,
     error,
     loading,
     emphasis,
     version,
+    imageUrl,
     processInput,
     regenerateBridgeStory,
     checkTone,
     publish,
-    setEmphasis
+    setEmphasis,
+    setProjectImage
   };
 }
