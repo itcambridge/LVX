@@ -9,14 +9,9 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Configure the API route to handle larger payloads
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '2mb',
-    },
-  },
-};
+// Configure the route segment with App Router syntax
+export const runtime = 'nodejs'; // 'edge' or 'nodejs'
+export const dynamic = 'force-dynamic'; // 'auto' | 'force-dynamic' | 'error' | 'force-static'
 
 export async function POST(req: Request) {
   try {
