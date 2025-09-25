@@ -258,9 +258,9 @@ export async function POST(req: Request) {
       try {
         console.log("Processing one-shot request with emphasis:", emphasis);
         
-        // Add a timeout for the entire operation
+        // Add a timeout for the entire operation (increased from 2 to 4 minutes)
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error("Request timed out after 2 minutes")), 120000);
+          setTimeout(() => reject(new Error("Request timed out after 4 minutes")), 240000);
         });
         
         // Race between the actual processing and the timeout
@@ -285,21 +285,27 @@ export async function POST(req: Request) {
           });
         }
         
-        // Check if it's a JSON parsing error
-        if (e.message && (e.message.includes("JSON") || e.message.includes("parse"))) {
-          console.log("JSON parsing error, using fallback response");
+        // Check if it's a JSON parsing error or HTML response
+        if (e.message && (e.message.includes("JSON") || e.message.includes("parse") || e.message.includes("HTML"))) {
+          console.log("JSON parsing error or HTML response, using fallback response");
           return NextResponse.json({ 
             ok: true, 
             data: fallbacks.oneshot,
-            warning: "Used fallback data due to JSON parsing error"
+            warning: "Used fallback data due to response format error: " + e.message
           });
         }
         
-        // For other errors, use the fallback
+        // For other errors, use the fallback with more detailed error information
+        console.log("Using fallback due to error:", e.message);
         return NextResponse.json({ 
           ok: true, 
           data: fallbacks.oneshot,
-          warning: "Used fallback data due to processing error: " + e.message
+          warning: "Used fallback data due to processing error: " + e.message,
+          error_details: {
+            message: e.message,
+            type: e.name || "Unknown",
+            stack: process.env.NODE_ENV === 'development' ? e.stack : undefined
+          }
         });
       }
     }

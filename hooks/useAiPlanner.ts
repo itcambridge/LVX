@@ -44,7 +44,18 @@ export function useAiPlanner(projectId: string) {
           // Still set the output but also show a warning
           setOutput(data.data);
           await save(data.data);
-          setError(`Note: ${data.warning}`);
+          
+          // Format the warning message to be more user-friendly
+          let warningMessage = data.warning;
+          
+          // Handle specific error types
+          if (warningMessage.includes("timeout")) {
+            warningMessage = "Your input is complex and took longer than expected to process. We've provided a simplified response. Consider breaking your topic into smaller parts for better results.";
+          } else if (warningMessage.includes("HTML") || warningMessage.includes("response format")) {
+            warningMessage = "We encountered an issue processing your input. This may be due to sensitive content. We've provided a simplified response instead.";
+          }
+          
+          setError(`Note: ${warningMessage}`);
           setLoading(false);
           return data.data;
         } else {
@@ -66,7 +77,19 @@ export function useAiPlanner(projectId: string) {
       }
     } catch (err: any) {
       console.error("Error processing input:", err);
-      setError(err.message || "Failed to process input");
+      
+      // Provide more user-friendly error messages
+      let errorMessage = err.message || "Failed to process input";
+      
+      if (errorMessage.includes("timeout") || errorMessage.includes("aborted")) {
+        errorMessage = "Your input took too long to process. Please try again with a shorter or less complex input.";
+      } else if (errorMessage.includes("HTML") || errorMessage.includes("content")) {
+        errorMessage = "We couldn't process your input due to content restrictions. Please try rephrasing with less sensitive language.";
+      } else if (errorMessage.includes("JSON") || errorMessage.includes("parse")) {
+        errorMessage = "We encountered a technical issue processing your input. Please try again or contact support if the issue persists.";
+      }
+      
+      setError(errorMessage);
       setLoading(false);
       return null;
     }

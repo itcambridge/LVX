@@ -88,9 +88,9 @@ export async function processOneShot(input: string, emphasis: string = "balanced
       ? input.substring(0, 4000) + "... (truncated for processing)"
       : input;
 
-    // Set a timeout for the API call
+    // Set a timeout for the API call (increased from 2 to 4 minutes)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+    const timeoutId = setTimeout(() => controller.abort(), 240000); // 4 minute timeout
     
     const res = await openai.chat.completions.create({
       model: "gpt-4-turbo",
@@ -129,6 +129,14 @@ export async function processOneShot(input: string, emphasis: string = "balanced
       } catch (parseError: any) {
         console.error("JSON parsing error:", parseError.message);
         
+        // Check if the response contains HTML (which would indicate an error page)
+        if (functionCall.function.arguments.includes("<html") || 
+            functionCall.function.arguments.includes("<!DOCTYPE") ||
+            functionCall.function.arguments.includes("<body")) {
+          console.error("Received HTML instead of JSON:", functionCall.function.arguments.substring(0, 100) + "...");
+          throw new Error("Received HTML response instead of JSON. This may indicate content filtering or an API error.");
+        }
+        
         // Attempt to fix common JSON issues
         let fixedJson = functionCall.function.arguments;
         
@@ -137,6 +145,14 @@ export async function processOneShot(input: string, emphasis: string = "balanced
         
         // Fix unescaped quotes within strings
         fixedJson = fixedJson.replace(/([^\\])"/g, '$1\\"');
+        
+        // Remove any non-JSON content at the beginning or end
+        const jsonStartIndex = fixedJson.indexOf('{');
+        const jsonEndIndex = fixedJson.lastIndexOf('}');
+        
+        if (jsonStartIndex >= 0 && jsonEndIndex > jsonStartIndex) {
+          fixedJson = fixedJson.substring(jsonStartIndex, jsonEndIndex + 1);
+        }
         
         // Try parsing the fixed JSON
         try {
