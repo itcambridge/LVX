@@ -269,9 +269,34 @@ export async function POST(req: Request) {
           timeoutPromise
         ]) as any;
         
-        // Validate the result against the schema
-        const validated = bridge_output_v1.parse(result);
-        return NextResponse.json({ ok: true, data: validated });
+        // Try to validate the result against the schema
+        try {
+          const validated = bridge_output_v1.parse(result);
+          return NextResponse.json({ ok: true, data: validated });
+        } catch (validationError: any) {
+          console.error("Schema validation error:", validationError);
+          
+          // Attempt to sanitize the result
+          const sanitizedResult = sanitizeResult(result, validationError);
+          
+          // Try to validate the sanitized result
+          try {
+            const validated = bridge_output_v1.parse(sanitizedResult);
+            return NextResponse.json({ 
+              ok: true, 
+              data: validated,
+              warning: "Used sanitized data due to validation errors"
+            });
+          } catch (secondValidationError) {
+            console.error("Failed to sanitize result:", secondValidationError);
+            // Fall back to the fallback response
+            return NextResponse.json({ 
+              ok: true, 
+              data: fallbacks.oneshot,
+              warning: "Used fallback data due to validation errors"
+            });
+          }
+        }
       } catch (e: any) {
         console.error("Error in one-shot processing:", e);
         
@@ -364,5 +389,79 @@ export async function POST(req: Request) {
       ok: false, 
       error: "Unexpected error: " + (e?.message || String(e))
     }, { status: 500 });
+  }
+}
+
+/**
+ * Sanitize the result to handle schema validation errors
+ * @param result The result to sanitize
+ * @param validationError The validation error
+ * @returns Sanitized result
+ */
+function sanitizeResult(result: any, validationError: any): any {
+  if (!result) return fallbacks.oneshot;
+  
+  try {
+    // Create a deep copy to avoid modifying the original
+    const sanitized = JSON.parse(JSON.stringify(result));
+    
+    // Extract error paths from the validation error
+    const errorPaths: string[][] = [];
+    if (validationError.errors) {
+      validationError.errors.forEach((err: any) => {
+        if (err.path) {
+          errorPaths.push(err.path);
+        }
+      });
+    }
+    
+    // Fix each error path
+    errorPaths.forEach(path => {
+      let current = sanitized;
+      let fallbackCurrent: any = fallbacks.oneshot;
+      
+      // Navigate to the parent of the problematic field
+      for (let i = 0; i < path.length - 1; i++) {
+        const key = path[i] as string;
+        if (current[key] === undefined) {
+          current[key] = {};
+        }
+        current = current[key];
+        
+        // Also navigate the fallback
+        if (fallbackCurrent && typeof fallbackCurrent === 'object' && key in fallbackCurrent) {
+          fallbackCurrent = fallbackCurrent[key];
+        } else {
+          fallbackCurrent = null;
+        }
+      }
+      
+      // Replace the problematic field with the fallback value
+      const lastKey = path[path.length - 1] as string;
+      if (fallbackCurrent && typeof fallbackCurrent === 'object' && lastKey in fallbackCurrent) {
+        current[lastKey] = fallbackCurrent[lastKey];
+      } else if (lastKey === 'type' && (path.includes('steelman') || path.includes('concern_map'))) {
+        // Special handling for type fields in steelman and concern_map
+        current[lastKey] = 'inference'; // Default to inference for invalid types
+      }
+    });
+    
+    // Ensure all required sections exist
+    const requiredSections = [
+      'concern_map', 'steelman', 'financial_accountability', 
+      'solution_paths', 'evidence_slots', 'bridge_story', 
+      'goals', 'safety_notes'
+    ] as const;
+    
+    requiredSections.forEach(section => {
+      if (!sanitized[section]) {
+        sanitized[section] = (fallbacks.oneshot as any)[section];
+      }
+    });
+    
+    return sanitized;
+  } catch (err) {
+    console.error("Error sanitizing result:", err);
+    return fallbacks.oneshot; // Return fallback if sanitization fails
   }
 }

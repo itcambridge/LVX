@@ -5,7 +5,7 @@ export const concern_map_v1 = z.object({
   themes: z.array(z.string()),
   claims: z.array(z.object({
     text: z.string(),
-    type: z.enum(["evidence", "inference", "emotion"])
+    type: z.enum(["evidence", "inference", "emotion", "empathy", "value"])
   })),
   values: z.array(z.string()),
   pains: z.array(z.string()),
@@ -16,13 +16,13 @@ export const steelman_v1 = z.object({
   author: z.object({
     points: z.array(z.object({
       text: z.string(),
-      type: z.enum(["evidence", "inference", "emotion"])
+      type: z.enum(["evidence", "inference", "emotion", "empathy", "value"])
     }))
   }),
   opponent: z.object({
     points: z.array(z.object({
       text: z.string(),
-      type: z.enum(["evidence", "inference", "emotion"])
+      type: z.enum(["evidence", "inference", "emotion", "empathy", "value"])
     }))
   })
 });

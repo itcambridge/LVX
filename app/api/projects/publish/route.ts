@@ -7,6 +7,9 @@ export async function POST(req: Request) {
   try {
     const { projectId, title, tldr, body_markdown, to_verify_items, imageUrl } = await req.json();
     
+    // Sanitize to_verify_items to handle potential schema validation issues
+    const sanitized_to_verify_items = sanitizeToVerifyItems(to_verify_items);
+    
     // First check if the project exists
     const { data: existingProject, error: checkError } = await s.from("projects")
       .select("id, routine_stage")
@@ -26,7 +29,7 @@ export async function POST(req: Request) {
         summary: tldr || "Bridge Story Summary", // Required field
         tldr: tldr || "",
         description: body_markdown || "",
-        to_verify_items: to_verify_items || null,
+        to_verify_items: sanitized_to_verify_items || null,
         status: "published",
         routine_completed: true,
         created_at: new Date().toISOString(),
@@ -65,7 +68,7 @@ export async function POST(req: Request) {
       summary: tldr || "Bridge Story Summary", // Ensure summary is updated
       tldr, 
       description: body_markdown,
-      to_verify_items: to_verify_items || null,
+      to_verify_items: sanitized_to_verify_items || null,
       routine_completed,
       status: "published"
     }).eq("id", projectId);
@@ -116,5 +119,41 @@ export async function POST(req: Request) {
       ok: false, 
       error: error.message || "Failed to publish project"
     }, { status: 500 });
+  }
+}
+
+/**
+ * Sanitize to_verify_items to handle potential schema validation issues
+ * @param items The to_verify_items to sanitize
+ * @returns Sanitized to_verify_items
+ */
+function sanitizeToVerifyItems(items: any): any {
+  if (!items) return items;
+  
+  try {
+    // Create a deep copy to avoid modifying the original
+    const sanitized = JSON.parse(JSON.stringify(items));
+    
+    // Ensure it's an array
+    if (!Array.isArray(sanitized)) {
+      return [];
+    }
+    
+    // Sanitize each item
+    return sanitized.map((item: any) => {
+      // Ensure each item has the required fields
+      if (!item.claim) {
+        item.claim = "Claim needs verification";
+      }
+      
+      if (!item.source_types || !Array.isArray(item.source_types)) {
+        item.source_types = ["Research"];
+      }
+      
+      return item;
+    });
+  } catch (err) {
+    console.error("Error sanitizing to_verify_items:", err);
+    return items; // Return original if sanitization fails
   }
 }

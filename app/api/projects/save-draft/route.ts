@@ -6,6 +6,9 @@ const s = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_P
 export async function POST(req: Request) {
   try {
     const { projectId, stage, bundlePatch, sources, toneScores, version, emphasis, imageUrl } = await req.json();
+    
+    // Sanitize bundlePatch to handle potential schema validation issues
+    const sanitizedBundlePatch = sanitizeBundle(bundlePatch);
 
     // First check if the project exists
     const { data: existingProject, error: checkError } = await s.from("projects")
@@ -58,7 +61,7 @@ export async function POST(req: Request) {
 
     // Project exists, proceed with update
     const proj = existingProject[0];
-    const plan_bundle = { ...(proj?.plan_bundle || {}), ...bundlePatch };
+    const plan_bundle = { ...(proj?.plan_bundle || {}), ...sanitizedBundlePatch };
     
     // Handle versioning
     let version_history = proj?.version_history || [];
@@ -130,4 +133,60 @@ export async function POST(req: Request) {
       error: error.message || "Failed to save draft"
     }, { status: 500 });
   }
+}
+
+/**
+ * Sanitize the bundle to handle potential schema validation issues
+ * @param bundle The bundle to sanitize
+ * @returns Sanitized bundle
+ */
+function sanitizeBundle(bundle: any): any {
+  if (!bundle) return bundle;
+  
+  try {
+    // Create a deep copy to avoid modifying the original
+    const sanitized = JSON.parse(JSON.stringify(bundle));
+    
+    // Sanitize steelman points
+    if (sanitized.steelman) {
+      if (sanitized.steelman.author && sanitized.steelman.author.points) {
+        sanitized.steelman.author.points = sanitizePoints(sanitized.steelman.author.points);
+      }
+      
+      if (sanitized.steelman.opponent && sanitized.steelman.opponent.points) {
+        sanitized.steelman.opponent.points = sanitizePoints(sanitized.steelman.opponent.points);
+      }
+    }
+    
+    // Sanitize concern map claims
+    if (sanitized.concern_map && sanitized.concern_map.claims) {
+      sanitized.concern_map.claims = sanitized.concern_map.claims.map((claim: any) => {
+        if (claim.type && !["evidence", "inference", "emotion", "empathy", "value"].includes(claim.type)) {
+          return { ...claim, type: "inference" }; // Default to inference for invalid types
+        }
+        return claim;
+      });
+    }
+    
+    return sanitized;
+  } catch (err) {
+    console.error("Error sanitizing bundle:", err);
+    return bundle; // Return original if sanitization fails
+  }
+}
+
+/**
+ * Sanitize steelman points to ensure valid types
+ * @param points Array of points to sanitize
+ * @returns Sanitized points
+ */
+function sanitizePoints(points: any[]): any[] {
+  if (!Array.isArray(points)) return points;
+  
+  return points.map(point => {
+    if (point.type && !["evidence", "inference", "emotion", "empathy", "value"].includes(point.type)) {
+      return { ...point, type: "inference" }; // Default to inference for invalid types
+    }
+    return point;
+  });
 }
