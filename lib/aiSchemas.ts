@@ -1,6 +1,109 @@
 import { z } from "zod";
 
-// Existing schemas
+// New schemas for the revised approach
+export const concern_map_v1 = z.object({
+  themes: z.array(z.string()),
+  claims: z.array(z.object({
+    text: z.string(),
+    type: z.enum(["evidence", "inference", "emotion"])
+  })),
+  values: z.array(z.string()),
+  pains: z.array(z.string()),
+  proposals: z.array(z.string())
+});
+
+export const steelman_v1 = z.object({
+  author: z.object({
+    points: z.array(z.object({
+      text: z.string(),
+      type: z.enum(["evidence", "inference", "emotion"])
+    }))
+  }),
+  opponent: z.object({
+    points: z.array(z.object({
+      text: z.string(),
+      type: z.enum(["evidence", "inference", "emotion"])
+    }))
+  })
+});
+
+export const financial_accountability_v1 = z.object({
+  metrics: z.array(z.object({
+    name: z.string(),
+    baseline: z.string().nullable(),
+    target: z.string()
+  })),
+  distribution: z.object({
+    costs: z.array(z.object({
+      stakeholder: z.string(),
+      impact: z.string()
+    })),
+    benefits: z.array(z.object({
+      stakeholder: z.string(),
+      impact: z.string()
+    }))
+  }),
+  rules: z.object({
+    sunset: z.string().nullable(),
+    scale: z.string().nullable()
+  }),
+  unknowns: z.array(z.string())
+});
+
+export const solution_paths_v1 = z.object({
+  paths: z.array(z.object({
+    name: z.string(),
+    core_moves: z.array(z.string()),
+    guardrails: z.array(z.string()),
+    trade_offs: z.array(z.string())
+  })).min(2).max(4)
+});
+
+export const evidence_slots_v1 = z.object({
+  to_verify: z.array(z.object({
+    claim: z.string(),
+    source_types: z.array(z.string())
+  }))
+});
+
+export const bridge_story_v1 = z.object({
+  thin_edge: z.string(),
+  paragraphs: z.array(z.string()).min(3).max(5),
+  emphasis: z.enum(["efficiency", "empathy", "balanced"])
+});
+
+export const goals_v1 = z.object({
+  messaging: z.array(z.object({
+    text: z.string(),
+    metric: z.string(),
+    horizon_days: z.number().min(30).max(90)
+  })),
+  policy: z.array(z.object({
+    text: z.string(),
+    metric: z.string(),
+    horizon_days: z.number().min(30).max(90)
+  }))
+});
+
+export const safety_notes_v1 = z.object({
+  warnings: z.array(z.string()).optional(),
+  rejected_content: z.boolean(),
+  rejection_reason: z.string().optional()
+});
+
+// Combined output schema for one-shot approach
+export const bridge_output_v1 = z.object({
+  concern_map: concern_map_v1,
+  steelman: steelman_v1,
+  financial_accountability: financial_accountability_v1,
+  solution_paths: solution_paths_v1,
+  evidence_slots: evidence_slots_v1,
+  bridge_story: bridge_story_v1,
+  goals: goals_v1,
+  safety_notes: safety_notes_v1
+});
+
+// Legacy schemas (keeping for backward compatibility)
 export const grievances_v1 = z.object({
   reflection: z.string(),
   grievances: z.array(z.object({
@@ -30,21 +133,6 @@ export const map_v1 = z.object({
       shared_interests: z.array(z.string()).optional()
     }))
   }))
-});
-
-export const goals_v1 = z.object({
-  goals: z.array(z.object({
-    title: z.string(),
-    why_now: z.string(),
-    metric: z.object({
-      name: z.string(),
-      baseline: z.string().nullable(),
-      target: z.string(),
-      deadline_days: z.number()
-    }),
-    owner_role: z.string(),
-    legitimacy_check: z.array(z.string())
-  })).min(1)
 });
 
 export const plans_v1 = z.object({

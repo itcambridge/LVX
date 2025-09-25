@@ -1,30 +1,24 @@
 "use client";
-import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAiPlanner } from "@/hooks/useAiPlanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import dynamic from "next/dynamic";
 
 const ToneMeter = dynamic(() => import("@/components/ai/tone-meter"), { ssr: false });
 
-// Helper function to safely convert any value to text
-function toText(v: any) {
-  if (typeof v === "string") return v;
-  if (v && typeof v === "object") {
-    if ("claim" in v && typeof v.claim === "string") return v.claim;
-    if ("text" in v && typeof v.text === "string") return v.text;
-    // last resort: readable JSON (avoid circular refs)
-    try { return JSON.stringify(v); } catch { return "[unprintable object]"; }
-  }
-  return String(v ?? "");
-}
-
-// ---- Wrapper: no hooks after the early return ----
+// Wrapper component to handle hydration issues
 export default function CreatePost() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   // Render the same thing on server and first client paint → no hydration mismatch
-  if (!mounted) return null; // or a tiny skeleton
+  if (!mounted) return null;
 
   return (
     <ErrorBoundary>
@@ -33,499 +27,438 @@ export default function CreatePost() {
   );
 }
 
-// ---- Inner: all hooks live here; order is stable on every render ----
+// Inner component with all the hooks
 function CreatePostInner() {
   const [projectId, setProjectId] = useState<string>("temp-id");
   const [ready, setReady] = useState(false);
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
   
   useEffect(() => {
-    setProjectId(crypto.randomUUID()); // client-only
+    setProjectId(crypto.randomUUID());
     setReady(true);
   }, []);
 
   const planner = useAiPlanner(projectId);
-  const [vent, setVent] = useState("");
-  const [draft, setDraft] = useState<any>({});
-  const [post, setPost] = useState<any>(null);
-  const [finalMd, setFinalMd] = useState("");
-  const [loading, setLoading] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Add this useEffect to log the draft data whenever it changes
-  useEffect(() => {
-    console.log("DRAFT DATA UPDATED:", JSON.stringify(draft, null, 2));
-    if (draft.s1) {
-      console.log("S1 STRUCTURE:", JSON.stringify(draft.s1, null, 2));
-      console.log("GRIEVANCES STRUCTURE:", 
-        draft.s1.grievances ? JSON.stringify(draft.s1.grievances, null, 2) : "undefined");
-    }
-    if (draft.s2) {
-      console.log("S2 STRUCTURE:", JSON.stringify(draft.s2, null, 2));
-      console.log("CLAIMS STRUCTURE:", 
-        draft.s2.claims ? JSON.stringify(draft.s2.claims, null, 2) : "undefined");
-    }
-  }, [draft]);
 
-  // Sync error state with planner error
-  useEffect(() => {
-    if (planner.error) {
-      setError(planner.error);
-    }
-  }, [planner.error]);
+  async function handleProcess() {
+    await planner.processInput(input);
+  }
 
-  async function publish() {
-    try {
-      setLoading("publishing");
-      setError(null);
-      const body = post?.body_markdown || finalMd;
-      
-      const response = await fetch("/api/projects/publish", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          projectId, 
-          title: post?.titles?.[0] || "Untitled", 
-          tldr: post?.tldr || "", 
-          body_markdown: body 
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to publish");
-      }
-      
-      window.location.href = `/project/${projectId}`;
-    } catch (err: any) {
-      console.error("Publish error:", err);
-      setError(err.message || "Failed to publish. Please try again.");
-      setLoading(null);
+  async function handlePublish() {
+    const success = await planner.publish();
+    if (success) {
+      router.push(`/project/${projectId}`);
     }
   }
 
-  async function runStage(stageNum: number, input: any) {
-    try {
-      setLoading(`stage${stageNum}`);
-      setError(null);
-      let result: any;
-      
-      switch(stageNum) {
-        case 1:
-          result = await planner.runStage1(input);
-          break;
-        case 2:
-          result = await planner.runStage2(input);
-          break;
-        case 3:
-          result = await planner.runStage3(input);
-          break;
-        case 4:
-          result = await planner.runStage4(input);
-          break;
-        case 5:
-          result = await planner.runStage5(input);
-          break;
-        case 6:
-          result = await planner.runStage6(input);
-          break;
-        case 7:
-          result = await planner.runStage7(input);
-          if (result) {
-            setPost(result);
-            setFinalMd(result.body_markdown || "");
-          }
-          break;
-        case 8:
-          const { scores, rewrite, error: scoreError } = await planner.scoreAndMaybeRewrite(input);
-          if (scoreError) {
-            setError("Failed to score the post. You can still publish.");
-          } else if (rewrite) {
-            setFinalMd(rewrite);
-          }
-          result = scores;
-          break;
-      }
-      
-      if (stageNum < 7 && result) {
-        setDraft((d:any) => ({...d, [`s${stageNum}`]: result}));
-      }
-      
-      setLoading(null);
-      return result;
-    } catch (err: any) {
-      console.error(`Error in stage ${stageNum}:`, err);
-      // Error is already set by the planner
-      setLoading(null);
-      return null;
-    }
+  function handleEmphasisChange(newEmphasis: "efficiency" | "empathy" | "balanced") {
+    planner.regenerateBridgeStory(newEmphasis);
+  }
+
+  function handleCheckTone() {
+    planner.checkTone();
   }
 
   return (
-    <div className="max-w-xl mx-auto p-4 space-y-6">
-      <h1 className="text-xl font-semibold">Create Political Media Post</h1>
-
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+    <div className="container mx-auto py-6 max-w-4xl">
+      <h1 className="text-2xl font-bold mb-6">Create Bridge Story</h1>
+      
+      {planner.error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
           <p className="font-medium">Error:</p>
-          <p>{error}</p>
+          <p>{planner.error}</p>
           <button 
             className="absolute top-0 right-0 px-4 py-3" 
-            onClick={() => {
-              setError(null);
-              planner.setError(null);
-            }}
+            onClick={() => setError(null)}
             aria-label="Close"
           >
             &times;
           </button>
         </div>
       )}
-
-      {/* Stage 1 */}
-      <section className={planner.stage !== 1 ? "opacity-50" : ""}>
-        <h2 className="font-medium">1) Vent</h2>
-        <textarea 
-          className="w-full border rounded p-2 mb-2" 
-          rows={4} 
-          value={vent} 
-          onChange={e => setVent(e.target.value)}
-          disabled={planner.stage !== 1}
-        />
-        <button 
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={() => runStage(1, vent)}
-          disabled={!ready || !vent.trim() || loading === "stage1" || planner.stage !== 1}
-        >
-          {loading === "stage1" ? "Processing..." : "Next"}
-        </button>
-      </section>
-
-      {/* Stage 2 */}
-      {planner.stage >= 2 && (
-        <section className={planner.stage !== 2 ? "opacity-50" : ""}>
-          <h2 className="font-medium">2) Claims</h2>
-          {draft.s1 && (
-            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
-              <p className="italic">{typeof draft.s1.reflection === 'string' ? draft.s1.reflection : "I understand your concerns."}</p>
-              <ul className="list-disc pl-5 mt-2">
-                {(() => {
-                  console.log("RENDERING GRIEVANCES:", 
-                    draft.s1?.grievances ? JSON.stringify(draft.s1.grievances, null, 2) : "undefined");
-                  
-                  const g =
-                    Array.isArray(draft.s1?.grievances) ? draft.s1.grievances :
-                    Array.isArray(draft.s1?.grievances?.claims) ? draft.s1.grievances.claims :
-                    [];
-                  
-                  console.log("PROCESSED GRIEVANCES ARRAY:", JSON.stringify(g, null, 2));
-
-                  if (!g.length) {
-                    return <li>Grievance information not available in expected format</li>;
-                  }
-
-                  // Special case: If we have a single grievance with a text property containing "[object Object]"
-                  if (g.length === 1 && typeof g[0]?.text === 'string' && g[0].text.includes('[object Object]')) {
-                    console.log("SPECIAL CASE: Found [object Object] in text property");
-                    // Split the text by commas and create fake claim objects
-                    const fakeClaimTexts = g[0].text.split(',');
-                    console.log("FAKE CLAIMS:", fakeClaimTexts);
-                    
-                    return fakeClaimTexts.map((text: string, i: number) => {
-                      // Replace [object Object] with "Claim #"
-                      const cleanedText = text.replace(/\[object Object\]/g, `Claim ${i+1}`);
-                      console.log(`CLEANED TEXT ${i}:`, cleanedText);
-                      return <li key={i}>{cleanedText}</li>;
-                    });
-                  }
-
-                  // Normal case: Process each item as before
-                  return g.map((item: any, i: number) => {
-                    console.log(`GRIEVANCE ITEM ${i}:`, JSON.stringify(item, null, 2));
-                    const text = toText(item);
-                    console.log(`GRIEVANCE TEXT ${i}:`, text);
-                    const emotion =
-                      item && typeof item === "object" && "emotion" in item && item.emotion
-                        ? ` (${item.emotion})`
-                        : "";
-                    return <li key={i}>{text}{emotion}</li>;
-                  });
-                })()}
-              </ul>
-            </div>
-          )}
+      
+      {!planner.output ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Start with your statement</CardTitle>
+            <CardDescription>
+              Paste a heated statement or transcript of a back-and-forth. We'll transform it into a constructive Bridge Story.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Textarea 
+              placeholder="Enter your statement here..."
+              className="min-h-[200px]"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+            />
+          </CardContent>
+          <CardFooter>
+            <Button 
+              onClick={handleProcess}
+              disabled={!ready || !input.trim() || planner.loading}
+            >
+              {planner.loading ? "Processing..." : "Generate Bridge Story"}
+            </Button>
+          </CardFooter>
+        </Card>
+      ) : (
+        <Tabs defaultValue="bridge-story">
+          <TabsList className="grid grid-cols-4 mb-4">
+            <TabsTrigger value="concern-map">Concern Map</TabsTrigger>
+            <TabsTrigger value="solutions">Solutions</TabsTrigger>
+            <TabsTrigger value="bridge-story">Bridge Story</TabsTrigger>
+            <TabsTrigger value="goals">Goals</TabsTrigger>
+          </TabsList>
           
-          {draft.s2 && (
-            <div className="mb-4 p-3 bg-blue-50 rounded text-sm">
-              <p className="font-medium mb-2">Generated Claims:</p>
-              
-              <ul className="list-disc pl-5">
-                {(() => {
-                  console.log("RENDERING CLAIMS:", 
-                    draft.s2?.claims ? JSON.stringify(draft.s2.claims, null, 2) : "undefined");
-                  
-                  if (!Array.isArray(draft.s2?.claims) || !draft.s2.claims.length) {
-                    return <li>No claims generated yet</li>;
-                  }
-                  
-                  // Special case: If we have claims with text containing "[object Object]"
-                  const hasObjectStringClaims = draft.s2.claims.some(
-                    (c: any) => typeof c === 'string' && c.includes('[object Object]')
-                  );
-                  
-                  if (hasObjectStringClaims) {
-                    console.log("SPECIAL CASE: Found [object Object] in claims");
-                    return draft.s2.claims.map((c: any, i: number) => {
-                      const claimText = typeof c === 'string' 
-                        ? c.replace(/\[object Object\]/g, `Claim ${i+1}`)
-                        : toText(c);
-                      
-                      console.log(`CLEANED CLAIM ${i}:`, claimText);
-                      
-                      return (
-                        <li key={i} className="mb-1">
-                          <span className="font-medium">{claimText}</span>
-                          <span className="ml-1 text-xs bg-blue-100 px-1 py-0.5 rounded">
-                            falsifiable
-                          </span>
-                        </li>
-                      );
-                    });
-                  }
-                  
-                  // Normal case: Process each claim as before
-                  return draft.s2.claims.map((c: any, i: number) => {
-                    console.log(`CLAIM ITEM ${i}:`, JSON.stringify(c, null, 2));
-                    const claimText = toText(c);
-                    console.log(`CLAIM TEXT ${i}:`, claimText);
-                    
-                    const claimType =
-                      c && typeof c === "object"
-                        ? (c.type ?? (typeof c.falsifiable === "boolean"
-                            ? (c.falsifiable ? "falsifiable" : "unfalsifiable")
-                            : null))
-                        : null;
-
-                    const evidence =
-                      c && typeof c === "object" && Array.isArray(c.proposed_evidence)
-                        ? c.proposed_evidence
-                        : null;
-
-                    return (
-                      <li key={i} className="mb-1">
-                        <span className="font-medium">{claimText}</span>
-                        {claimType && (
-                          <span className="ml-1 text-xs bg-blue-100 px-1 py-0.5 rounded">
-                            {claimType}
-                          </span>
-                        )}
-                        {evidence && evidence.length > 0 && (
-                          <div className="ml-4 mt-1 text-xs text-gray-600">
-                            <p>Proposed evidence:</p>
-                            <ul className="list-disc pl-4">
-                              {evidence.map((e: any, j: number) => (
-                                <li key={j}>{toText(e)}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
+          {/* Concern Map Tab */}
+          <TabsContent value="concern-map">
+            <Card>
+              <CardHeader>
+                <CardTitle>Concern Map</CardTitle>
+                <CardDescription>Claims, values, pains, and proposals identified in your statement</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Themes */}
+                <div>
+                  <h3 className="font-medium mb-2">Themes</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {planner.output.concern_map.themes.map((theme: string, i: number) => (
+                      <Badge key={i} variant="outline">{theme}</Badge>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Claims */}
+                <div>
+                  <h3 className="font-medium mb-2">Claims</h3>
+                  <ul className="space-y-2">
+                    {planner.output.concern_map.claims.map((claim: any, i: number) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <Badge variant="secondary">{claim.type}</Badge>
+                        <span>{claim.text}</span>
                       </li>
-                    );
-                  });
-                })()}
-              </ul>
-              {draft.s2 && typeof draft.s2.evidence_request === 'string' && (
-                <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
-              )}
-            </div>
-          )}
+                    ))}
+                  </ul>
+                </div>
+                
+                {/* Values */}
+                <div>
+                  <h3 className="font-medium mb-2">Values</h3>
+                  <ul className="list-disc pl-5">
+                    {planner.output.concern_map.values.map((value: string, i: number) => (
+                      <li key={i}>{value}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                {/* Pains */}
+                <div>
+                  <h3 className="font-medium mb-2">Pains</h3>
+                  <ul className="list-disc pl-5">
+                    {planner.output.concern_map.pains.map((pain: string, i: number) => (
+                      <li key={i}>{pain}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                {/* Proposals */}
+                <div>
+                  <h3 className="font-medium mb-2">Proposals</h3>
+                  <ul className="list-disc pl-5">
+                    {planner.output.concern_map.proposals.map((proposal: string, i: number) => (
+                      <li key={i}>{proposal}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                {/* Steelman */}
+                <div>
+                  <h3 className="font-medium mb-2">Steelman Arguments</h3>
+                  
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium mb-1">Author's Best Case</h4>
+                    <ul className="space-y-2">
+                      {planner.output.steelman.author.points.map((point: any, i: number) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <Badge variant="secondary">{point.type}</Badge>
+                          <span>{point.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Opponent's Best Case</h4>
+                    <ul className="space-y-2">
+                      {planner.output.steelman.opponent.points.map((point: any, i: number) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <Badge variant="secondary">{point.type}</Badge>
+                          <span>{point.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
           
-          <button 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => runStage(2, draft.s1)}
-            disabled={!ready || loading === "stage2" || planner.stage !== 2}
-          >
-            {loading === "stage2" ? "Processing..." : draft.s2 ? "Regenerate Claims" : "Generate Claims"}
-          </button>
-        </section>
-      )}
-
-      {/* Stage 3 */}
-      {planner.stage >= 3 && (
-        <section className={planner.stage !== 3 ? "opacity-50" : ""}>
-          <h2 className="font-medium">3) Steelman & Stakeholders</h2>
-          {draft.s2 && (
-            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
-              <p className="font-medium">Claims:</p>
-              <ul className="list-disc pl-5">
-                {Array.isArray(draft.s2?.claims) && draft.s2.claims.length ? 
-                  draft.s2.claims.map((c: any, i: number) => {
-                    const claimText = toText(c);
-                    const claimType = c && typeof c === "object" && "type" in c ? c.type : "falsifiable";
+          {/* Solutions Tab */}
+          <TabsContent value="solutions">
+            <Card>
+              <CardHeader>
+                <CardTitle>Solution Paths</CardTitle>
+                <CardDescription>Different approaches to address the concerns</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Financial Accountability */}
+                <div>
+                  <h3 className="font-medium mb-2">Financial Accountability</h3>
+                  
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium mb-1">Metrics</h4>
+                    <ul className="list-disc pl-5">
+                      {planner.output.financial_accountability.metrics.map((metric: any, i: number) => (
+                        <li key={i}>
+                          {metric.name}: {metric.baseline || "N/A"} → {metric.target}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium mb-1">Distribution of Costs & Benefits</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <h5 className="text-xs font-medium">Costs</h5>
+                        <ul className="list-disc pl-5 text-sm">
+                          {planner.output.financial_accountability.distribution.costs.map((item: any, i: number) => (
+                            <li key={i}>
+                              {item.stakeholder}: {item.impact}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-medium">Benefits</h5>
+                        <ul className="list-disc pl-5 text-sm">
+                          {planner.output.financial_accountability.distribution.benefits.map((item: any, i: number) => (
+                            <li key={i}>
+                              {item.stakeholder}: {item.impact}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium mb-1">Rules</h4>
+                    <p className="text-sm">
+                      <span className="font-medium">Sunset:</span> {planner.output.financial_accountability.rules.sunset || "None specified"}
+                    </p>
+                    <p className="text-sm">
+                      <span className="font-medium">Scale:</span> {planner.output.financial_accountability.rules.scale || "None specified"}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-sm font-medium mb-1">Unknowns</h4>
+                    <ul className="list-disc pl-5 text-sm">
+                      {planner.output.financial_accountability.unknowns.map((item: string, i: number) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                
+                {/* Solution Paths */}
+                <div>
+                  <h3 className="font-medium mb-2">Solution Paths</h3>
+                  
+                  {planner.output.solution_paths.paths.map((path: any, i: number) => (
+                    <div key={i} className="mb-6 p-4 border rounded">
+                      <h4 className="font-medium text-lg mb-2">{path.name}</h4>
+                      
+                      <div className="mb-3">
+                        <h5 className="text-sm font-medium mb-1">Core Moves</h5>
+                        <ul className="list-disc pl-5 text-sm">
+                          {path.core_moves.map((move: string, j: number) => (
+                            <li key={j}>{move}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      
+                      <div className="mb-3">
+                        <h5 className="text-sm font-medium mb-1">Guardrails</h5>
+                        <ul className="list-disc pl-5 text-sm">
+                          {path.guardrails.map((guardrail: string, j: number) => (
+                            <li key={j}>{guardrail}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h5 className="text-sm font-medium mb-1">Trade-offs</h5>
+                        <ul className="list-disc pl-5 text-sm">
+                          {path.trade_offs.map((tradeoff: string, j: number) => (
+                            <li key={j}>{tradeoff}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Evidence Slots */}
+                <div>
+                  <h3 className="font-medium mb-2">Evidence Needed</h3>
+                  <ul className="list-disc pl-5">
+                    {planner.output.evidence_slots.to_verify.map((item: any, i: number) => (
+                      <li key={i} className="mb-2">
+                        <p className="font-medium">{item.claim}</p>
+                        <p className="text-sm text-gray-600">
+                          Sources: {item.source_types.join(", ")}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          {/* Bridge Story Tab */}
+          <TabsContent value="bridge-story">
+            <Card>
+              <CardHeader>
+                <CardTitle>{planner.output.bridge_story.thin_edge}</CardTitle>
+                <CardDescription>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span>Emphasis:</span>
+                    <div className="flex gap-1">
+                      <Button 
+                        variant={planner.emphasis === "efficiency" ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => handleEmphasisChange("efficiency")}
+                        disabled={planner.loading}
+                      >
+                        Efficiency
+                      </Button>
+                      <Button 
+                        variant={planner.emphasis === "empathy" ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => handleEmphasisChange("empathy")}
+                        disabled={planner.loading}
+                      >
+                        Empathy
+                      </Button>
+                      <Button 
+                        variant={planner.emphasis === "balanced" ? "default" : "outline"} 
+                        size="sm"
+                        onClick={() => handleEmphasisChange("balanced")}
+                        disabled={planner.loading}
+                      >
+                        Balanced
+                      </Button>
+                    </div>
+                  </div>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="prose max-w-none">
+                  {planner.output.bridge_story.paragraphs.map((paragraph: string, i: number) => (
+                    <p key={i} className="mb-4">{paragraph}</p>
+                  ))}
+                </div>
+                
+                {planner.output.safety_notes && (
+                  <div className="mt-6">
+                    <h3 className="font-medium mb-2">Tone Analysis</h3>
+                    <ToneMeter scores={planner.output.safety_notes} />
                     
-                    return (
-                      <li key={i}>{claimText} ({claimType})</li>
-                    );
-                  }) : 
-                  <li>No claims available</li>
-                }
-              </ul>
-              {typeof draft.s2.evidence_request === 'string' && (
-                <p className="mt-2 text-xs italic">{draft.s2.evidence_request}</p>
-              )}
-            </div>
-          )}
-          <button 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => runStage(3, draft.s2)}
-            disabled={!ready || loading === "stage3" || planner.stage !== 3}
-          >
-            {loading === "stage3" ? "Processing..." : "Map Stakeholders"}
-          </button>
-        </section>
-      )}
-
-      {/* Stage 4 */}
-      {planner.stage >= 4 && (
-        <section className={planner.stage !== 4 ? "opacity-50" : ""}>
-          <h2 className="font-medium">4) SMART Goals</h2>
-          {draft.s3 && (
-            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
-              <p className="font-medium">Analyses:</p>
-              {draft.s3.analyses.map((a: any, i: number) => (
-                <div key={i} className="mb-2">
-                  <p><strong>Claim:</strong> {a.claim}</p>
-                  <p><strong>Steelman:</strong> {a.steelman}</p>
-                  <p><strong>Stakeholders:</strong> {a.stakeholders.length}</p>
+                    {planner.output.safety_notes.warnings && planner.output.safety_notes.warnings.length > 0 && (
+                      <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded">
+                        <h4 className="font-medium text-amber-800">Warnings</h4>
+                        <ul className="list-disc pl-5 text-amber-700">
+                          {planner.output.safety_notes.warnings.map((warning: string, i: number) => (
+                            <li key={i}>{warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={handleCheckTone}
+                      disabled={planner.loading}
+                    >
+                      {planner.loading ? "Checking..." : "Re-check Tone"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+              <CardFooter>
+                <Button 
+                  onClick={handlePublish}
+                  disabled={planner.loading}
+                  className="w-full"
+                >
+                  {planner.loading ? "Publishing..." : "Publish Bridge Story"}
+                </Button>
+              </CardFooter>
+            </Card>
+          </TabsContent>
+          
+          {/* Goals Tab */}
+          <TabsContent value="goals">
+            <Card>
+              <CardHeader>
+                <CardTitle>Goals</CardTitle>
+                <CardDescription>Short-term, measurable goals (30-90 day horizons)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Messaging Goals */}
+                <div>
+                  <h3 className="font-medium mb-2">Messaging Goals</h3>
+                  <ul className="space-y-4">
+                    {planner.output.goals.messaging.map((goal: any, i: number) => (
+                      <li key={i} className="p-3 border rounded">
+                        <p className="font-medium">{goal.text}</p>
+                        <div className="flex justify-between text-sm mt-1">
+                          <span>Metric: {goal.metric}</span>
+                          <span>Timeline: {goal.horizon_days} days</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              ))}
-            </div>
-          )}
-          <button 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => runStage(4, draft.s3)}
-            disabled={!ready || loading === "stage4" || planner.stage !== 4}
-          >
-            {loading === "stage4" ? "Processing..." : "Set Goals"}
-          </button>
-        </section>
-      )}
-
-      {/* Stage 5 */}
-      {planner.stage >= 5 && (
-        <section className={planner.stage !== 5 ? "opacity-50" : ""}>
-          <h2 className="font-medium">5) Plan Options</h2>
-          {draft.s4 && (
-            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
-              <p className="font-medium">Goals:</p>
-              <ul className="list-disc pl-5">
-                {draft.s4.goals.map((g: any, i: number) => (
-                  <li key={i}>
-                    <strong>{g.title}</strong>
-                    <p className="text-xs">Metric: {g.metric.name} ({g.metric.baseline} → {g.metric.target})</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <button 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => runStage(5, draft.s4)}
-            disabled={!ready || loading === "stage5" || planner.stage !== 5}
-          >
-            {loading === "stage5" ? "Processing..." : "Generate Plans"}
-          </button>
-        </section>
-      )}
-
-      {/* Stage 6 */}
-      {planner.stage >= 6 && (
-        <section className={planner.stage !== 6 ? "opacity-50" : ""}>
-          <h2 className="font-medium">6) Task Board</h2>
-          {draft.s5 && (
-            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
-              <p className="font-medium">Plans:</p>
-              {draft.s5.plans.map((p: any, i: number) => (
-                <div key={i} className="mb-2 pb-2 border-b">
-                  <p><strong>{p.name}</strong></p>
-                  <p className="text-xs">Time: {p.time_range_days[0]}-{p.time_range_days[1]} days</p>
-                  <p className="text-xs">Budget: {p.budget_range[0]}-{p.budget_range[1]}</p>
+                
+                {/* Policy Goals */}
+                <div>
+                  <h3 className="font-medium mb-2">Policy Goals</h3>
+                  <ul className="space-y-4">
+                    {planner.output.goals.policy.map((goal: any, i: number) => (
+                      <li key={i} className="p-3 border rounded">
+                        <p className="font-medium">{goal.text}</p>
+                        <div className="flex justify-between text-sm mt-1">
+                          <span>Metric: {goal.metric}</span>
+                          <span>Timeline: {goal.horizon_days} days</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              ))}
-            </div>
-          )}
-          <button 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => runStage(6, draft.s5)}
-            disabled={!ready || loading === "stage6" || planner.stage !== 6}
-          >
-            {loading === "stage6" ? "Processing..." : "Create Tasks"}
-          </button>
-        </section>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       )}
-
-      {/* Stage 7 */}
-      {planner.stage >= 7 && (
-        <section className={planner.stage !== 7 ? "opacity-50" : ""}>
-          <h2 className="font-medium">7) Draft Story</h2>
-          {draft.s6 && (
-            <div className="mb-2 p-3 bg-gray-50 rounded text-sm">
-              <p className="font-medium">Roles: {draft.s6.roles.join(", ")}</p>
-              <p className="font-medium mt-2">Sprint Weeks: {draft.s6.sprint_weeks.length}</p>
-            </div>
-          )}
-          <button 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => runStage(7, draft)}
-            disabled={!ready || loading === "stage7" || planner.stage !== 7}
-          >
-            {loading === "stage7" ? "Processing..." : "Generate Post"}
-          </button>
-          {post && (
-            <div className="mt-3">
-              <h3 className="font-medium">Preview</h3>
-              <p className="text-sm font-medium mt-2">{post.titles?.[0]}</p>
-              <p className="text-sm italic mb-2">{post.tldr}</p>
-              <textarea 
-                className="w-full border rounded p-2" 
-                rows={12} 
-                value={finalMd} 
-                onChange={e => setFinalMd(e.target.value)} 
-              />
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Stage 8 */}
-      {planner.stage >= 8 && (
-        <section>
-          <h2 className="font-medium">8) Tone Score</h2>
-          <button 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => runStage(8, finalMd)}
-            disabled={!ready || loading === "stage8" || !finalMd}
-          >
-            {loading === "stage8" ? "Processing..." : "Score / Rewrite"}
-          </button>
-          <ToneMeter scores={planner.scores} />
-          {(planner.scores && (planner.scores.civility < 80 || planner.scores.heat > 30)) && (
-            <div className="text-amber-600 text-sm mt-2">
-              Warning: Civility below target or Heat above target. You can rewrite (recommended) or continue.
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Publish (enabled only after Stage 8 reached) */}
-      <button
-        disabled={!ready || planner.stage < 8 || !finalMd || loading === "publishing"}
-        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed w-full mt-4"
-        onClick={publish}
-      >
-        {loading === "publishing" ? "Publishing..." : "Publish"}
-      </button>
     </div>
   );
 }

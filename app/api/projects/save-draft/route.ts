@@ -5,21 +5,37 @@ const s = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_P
 
 export async function POST(req: Request) {
   try {
-    const { projectId, stage, bundlePatch, sources, toneScores } = await req.json();
+    const { projectId, stage, bundlePatch, sources, toneScores, version, emphasis } = await req.json();
 
-    const { data: proj, error: fetchError } = await s.from("projects").select("plan_bundle").eq("id", projectId).single();
+    const { data: proj, error: fetchError } = await s.from("projects").select("plan_bundle, version_history").eq("id", projectId).single();
     if (fetchError) {
       console.error("Error fetching project:", fetchError);
       return NextResponse.json({ ok: false, error: fetchError }, { status: 500 });
     }
 
     const plan_bundle = { ...(proj?.plan_bundle || {}), ...bundlePatch };
+    
+    // Handle versioning
+    let version_history = proj?.version_history || [];
+    if (version) {
+      // Add current state to version history before updating
+      version_history = [
+        ...(Array.isArray(version_history) ? version_history : []),
+        {
+          timestamp: new Date().toISOString(),
+          plan_bundle: proj?.plan_bundle || {},
+          version
+        }
+      ];
+    }
 
     const { error } = await s.from("projects").update({
       plan_bundle,
       sources: sources ?? undefined,
       tone_scores: toneScores ?? undefined,
-      routine_stage: stage
+      routine_stage: stage,
+      version_history,
+      emphasis: emphasis || undefined
     }).eq("id", projectId);
 
     if (error) {

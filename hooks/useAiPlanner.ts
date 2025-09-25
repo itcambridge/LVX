@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 
-type Stage = 1|2|3|4|5|6|7|8;
-
 export function useAiPlanner(projectId: string) {
-  const [stage, setStage] = useState<Stage>(1);
-  const [bundle, setBundle] = useState<any>({});
-  const [scores, setScores] = useState<any>(null);
+  const [output, setOutput] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [emphasis, setEmphasis] = useState<"efficiency" | "empathy" | "balanced">("balanced");
+  const [version, setVersion] = useState<number>(1);
   const isMounted = useRef(true);
   
   // Set isMounted to false when component unmounts
@@ -17,182 +16,225 @@ export function useAiPlanner(projectId: string) {
   }, []);
 
   /**
-   * Call the AI API with error handling
+   * Process input using one-shot approach with fallback to staged
    */
-  async function call(stageKey: string, input: any) {
-    const ac = new AbortController();
+  async function processInput(input: string) {
+    if (!isMounted.current) return;
+    setLoading(true);
+    setError(null);
+    
     try {
-      if (!isMounted.current) return;
-      setError(null);
-      console.log(`Calling AI for stage ${stageKey} with input:`, input);
-      
-      const r = await fetch("/api/ai/plan", { 
-        method: "POST", 
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ stage: stageKey, input }),
-        signal: ac.signal
+      // Try one-shot approach first
+      const response = await fetch("/api/ai/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          stage: "oneshot", 
+          input,
+          emphasis
+        })
       });
       
-      const j = await r.json();
+      const data = await response.json();
       
-      if (!j.ok) {
-        console.error(`Error in stage ${stageKey}:`, j.error, "Raw:", j.raw);
-        if (isMounted.current) {
-          setError(Array.isArray(j.error) ? j.error.map((e: any) => e.message).join(", ") : j.error);
-        }
-        throw new Error(j.error || "AI processing error");
+      if (data.ok) {
+        setOutput(data.data);
+        await save(data.data);
+        setLoading(false);
+        return data.data;
+      } else if (data.fallback) {
+        // Fall back to staged approach
+        setError("One-shot processing failed. Staged approach not yet implemented.");
+        setLoading(false);
+        return null;
+      } else {
+        setError(data.error || "Processing failed");
+        setLoading(false);
+        return null;
       }
-      
-      return j.data;
     } catch (err: any) {
-      console.error(`Error in stage ${stageKey}:`, err);
-      if (isMounted.current) {
-        setError(err.message || "Failed to process this stage");
-      }
-      throw err;
-    } finally {
-      // Clean up the abort controller
-      ac.abort();
+      console.error("Error processing input:", err);
+      setError(err.message || "Failed to process input");
+      setLoading(false);
+      return null;
     }
   }
 
   /**
    * Save the current state to the database
    */
-  async function save(partial: any, extra?: any) {
+  async function save(bundlePatch: any) {
     if (!isMounted.current) return;
     
-    const ac = new AbortController();
     try {
       const response = await fetch("/api/projects/save-draft", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ projectId, stage, bundlePatch: partial, ...extra }),
-        signal: ac.signal
+        body: JSON.stringify({ 
+          projectId, 
+          bundlePatch,
+          version,
+          emphasis,
+          stage: "oneshot" // For compatibility with existing code
+        })
       });
       
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Error saving draft:", errorData);
+      } else {
+        // Increment version for next save
+        setVersion(v => v + 1);
       }
     } catch (err: any) {
       console.error("Failed to save draft:", err);
-    } finally {
-      ac.abort();
+    }
+  }
+
+  /**
+   * Regenerate the bridge story with a different emphasis
+   */
+  async function regenerateBridgeStory(newEmphasis: "efficiency" | "empathy" | "balanced") {
+    if (!output || !output.bridge_story || !isMounted.current) return;
+    
+    setLoading(true);
+    setError(null);
+    setEmphasis(newEmphasis);
+    
+    try {
+      const response = await fetch("/api/ai/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          stage: "rewrite", 
+          input: output.bridge_story.paragraphs.join("\n\n"),
+          emphasis: newEmphasis
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.ok) {
+        // Update only the bridge story part
+        const updatedOutput = {
+          ...output,
+          bridge_story: {
+            ...output.bridge_story,
+            paragraphs: data.data.markdown.split("\n\n"),
+            emphasis: newEmphasis
+          }
+        };
+        
+        setOutput(updatedOutput);
+        await save(updatedOutput);
+        setLoading(false);
+        return updatedOutput;
+      } else {
+        setError(data.error || "Regeneration failed");
+        setLoading(false);
+        return null;
+      }
+    } catch (err: any) {
+      console.error("Error regenerating bridge story:", err);
+      setError(err.message || "Failed to regenerate bridge story");
+      setLoading(false);
+      return null;
+    }
+  }
+
+  /**
+   * Publish the project
+   */
+  async function publish() {
+    if (!output || !output.bridge_story || !isMounted.current) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch("/api/projects/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          projectId, 
+          title: output.bridge_story.thin_edge,
+          tldr: output.bridge_story.paragraphs[0],
+          body_markdown: output.bridge_story.paragraphs.join("\n\n"),
+          to_verify_items: output.evidence_slots.to_verify
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to publish");
+      }
+      
+      setLoading(false);
+      return true;
+    } catch (err: any) {
+      console.error("Publish error:", err);
+      setError(err.message || "Failed to publish");
+      setLoading(false);
+      return false;
+    }
+  }
+
+  /**
+   * Check tone of the bridge story
+   */
+  async function checkTone() {
+    if (!output || !output.bridge_story || !isMounted.current) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch("/api/ai/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          stage: "tone", 
+          input: output.bridge_story.paragraphs.join("\n\n")
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.ok) {
+        const updatedOutput = {
+          ...output,
+          safety_notes: data.data
+        };
+        
+        setOutput(updatedOutput);
+        await save(updatedOutput);
+        setLoading(false);
+        return data.data;
+      } else {
+        setError(data.error || "Tone check failed");
+        setLoading(false);
+        return null;
+      }
+    } catch (err: any) {
+      console.error("Error checking tone:", err);
+      setError(err.message || "Failed to check tone");
+      setLoading(false);
+      return null;
     }
   }
 
   return {
-    stage, setStage, bundle, setBundle, scores, setScores, error, setError,
-    
-    runStage1: async (vent: string) => {
-      try {
-        const data = await call("s1", vent); 
-        setBundle((b:any) => ({...b, s1:data})); 
-        setStage(2); 
-        await save({ s1:data });
-        return data;
-      } catch (err) {
-        // Error is already set by call()
-        return null;
-      }
-    },
-    
-    runStage2: async (s1:any) => {
-      try {
-        const data = await call("s2", s1); 
-        setBundle((b:any) => ({...b, s2:data})); 
-        setStage(3); 
-        await save({ s2:data });
-        return data;
-      } catch (err) {
-        return null;
-      }
-    },
-    
-    runStage3: async (s2:any) => { 
-      try {
-        const d = await call("s3", s2); 
-        setBundle((b:any) => ({...b, s3:d})); 
-        setStage(4); 
-        await save({ s3:d }); 
-        return d;
-      } catch (err) {
-        return null;
-      }
-    },
-    
-    runStage4: async (s3:any) => { 
-      try {
-        const d = await call("s4", s3); 
-        setBundle((b:any) => ({...b, s4:d})); 
-        setStage(5); 
-        await save({ s4:d }); 
-        return d;
-      } catch (err) {
-        return null;
-      }
-    },
-    
-    runStage5: async (s4:any) => { 
-      try {
-        const d = await call("s5", s4); 
-        setBundle((b:any) => ({...b, s5:d})); 
-        setStage(6); 
-        await save({ s5:d }); 
-        return d;
-      } catch (err) {
-        return null;
-      }
-    },
-    
-    runStage6: async (s5:any) => { 
-      try {
-        const d = await call("s6", s5); 
-        setBundle((b:any) => ({...b, s6:d})); 
-        setStage(7); 
-        await save({ s6:d }); 
-        return d;
-      } catch (err) {
-        return null;
-      }
-    },
-    
-    runStage7: async (input:any, sources?:any[]) => {
-      try {
-        const d = await call("s7", { ...input, sources }); 
-        setBundle((b:any) => ({...b, s7:d})); 
-        setStage(8); 
-        await save({ s7:d }, { sources }); 
-        return d;
-      } catch (err) {
-        return null;
-      }
-    },
-    
-    scoreAndMaybeRewrite: async (markdown: string) => {
-      try {
-        const s = await call("s8score", markdown); 
-        setScores(s);
-        
-        if (s.civility < 80 || s.heat > 30) {
-          try {
-            const rw = await call("s8rewrite", markdown);
-            return { scores: s, rewrite: rw?.markdown || rw };
-          } catch (rewriteErr) {
-            console.error("Error during rewrite:", rewriteErr);
-            return { scores: s, rewrite: null, rewriteError: true };
-          }
-        }
-        
-        return { scores: s, rewrite: null };
-      } catch (err) {
-        return { scores: null, rewrite: null, error: true };
-      }
-    }
+    output,
+    error,
+    loading,
+    emphasis,
+    version,
+    processInput,
+    regenerateBridgeStory,
+    checkTone,
+    publish,
+    setEmphasis
   };
 }

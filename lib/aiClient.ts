@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { SYSTEM_CORE, P_ONE_SHOT } from "./aiPrompts";
+import { zodToJsonSchema, bridge_output_v1 } from "./aiSchemas";
 
 // Create OpenAI client with error handling
 export const openai = new OpenAI({ 
@@ -62,6 +64,58 @@ export async function chatWithTools(system: string, user: string, schema: any, t
     }
   } catch (error: any) {
     // Handle API errors
+    console.error("OpenAI API error:", error.message || error);
+    throw error;
+  }
+}
+
+/**
+ * Process input using one-shot approach to generate a complete bridge output
+ * @param input The user's input text
+ * @param emphasis The emphasis style (efficiency, empathy, or balanced)
+ * @returns Complete bridge output
+ */
+export async function processOneShot(input: string, emphasis: string = "balanced") {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("API key not configured");
+    }
+
+    console.log("Making one-shot OpenAI request with emphasis:", emphasis);
+
+    const res = await openai.chat.completions.create({
+      model: "gpt-4-turbo",
+      messages: [
+        { role: "system", content: SYSTEM_CORE }, 
+        { role: "user", content: P_ONE_SHOT + `\nInput: ${input}\nEmphasis: ${emphasis}` }
+      ],
+      tools: [{
+        type: "function",
+        function: {
+          name: "process_bridge_output",
+          description: "Process the complete bridge output",
+          parameters: zodToJsonSchema(bridge_output_v1)
+        }
+      }],
+      tool_choice: { type: "function", function: { name: "process_bridge_output" } },
+      temperature: 0.7,
+      max_tokens: 4000
+    });
+
+    // Extract the tool call response
+    const toolCalls = res.choices[0]?.message?.tool_calls;
+    if (!toolCalls || toolCalls.length === 0) {
+      throw new Error("Invalid API response format");
+    }
+
+    // Parse the function arguments
+    const functionCall = toolCalls[0];
+    if (functionCall.type === 'function') {
+      return JSON.parse(functionCall.function.arguments);
+    } else {
+      throw new Error("Unsupported tool call type");
+    }
+  } catch (error: any) {
     console.error("OpenAI API error:", error.message || error);
     throw error;
   }
