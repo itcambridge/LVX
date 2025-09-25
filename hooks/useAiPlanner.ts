@@ -38,10 +38,21 @@ export function useAiPlanner(projectId: string) {
       const data = await response.json();
       
       if (data.ok) {
-        setOutput(data.data);
-        await save(data.data);
-        setLoading(false);
-        return data.data;
+        // Check if a fallback was used
+        if (data.warning) {
+          // Still set the output but also show a warning
+          setOutput(data.data);
+          await save(data.data);
+          setError(`Note: ${data.warning}`);
+          setLoading(false);
+          return data.data;
+        } else {
+          // Normal successful response
+          setOutput(data.data);
+          await save(data.data);
+          setLoading(false);
+          return data.data;
+        }
       } else if (data.fallback) {
         // Fall back to staged approach
         setError("One-shot processing failed. Staged approach not yet implemented.");

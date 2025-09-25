@@ -151,6 +151,68 @@ const stageMap = [
 
 // Fallback responses for different stages
 const fallbacks = {
+  // One-shot fallback with minimal structure
+  oneshot: {
+    concern_map: {
+      themes: ["Communication", "Process Improvement"],
+      claims: [{ text: "The system encountered an error processing your input.", type: "inference" }],
+      values: ["Transparency", "Efficiency"],
+      pains: ["Difficulty in processing the input"],
+      proposals: ["Provide more specific information"]
+    },
+    steelman: {
+      author: { points: [{ text: "Your perspective is important.", type: "value" }] },
+      opponent: { points: [{ text: "Alternative viewpoints exist.", type: "value" }] }
+    },
+    financial_accountability: {
+      metrics: [{ name: "Cost-benefit ratio", baseline: "Unknown", target: "Positive" }],
+      distribution: {
+        costs: [{ stakeholder: "All parties", impact: "Varies" }],
+        benefits: [{ stakeholder: "All parties", impact: "Varies" }]
+      },
+      rules: { sunset: "To be determined", scale: "As appropriate" },
+      unknowns: ["Specific financial impacts"]
+    },
+    solution_paths: {
+      paths: [{
+        name: "Simplified approach",
+        core_moves: ["Gather more information", "Consult stakeholders"],
+        guardrails: ["Ensure transparency", "Maintain ethical standards"],
+        trade_offs: ["Speed vs. thoroughness"]
+      }]
+    },
+    evidence_slots: {
+      to_verify: [{ 
+        claim: "The system encountered an error processing your specific input.", 
+        source_types: ["Technical logs", "User feedback"] 
+      }]
+    },
+    bridge_story: {
+      thin_edge: "Finding common ground",
+      paragraphs: [
+        "We encountered a technical issue while processing your input. This is a temporary setback that we can work through together.",
+        "Despite this challenge, we recognize the importance of your perspective and the need to address your concerns effectively.",
+        "Moving forward, we can focus on gathering more specific information and working collaboratively toward a solution that addresses the core issues at hand."
+      ],
+      emphasis: "balanced"
+    },
+    goals: {
+      messaging: [{ 
+        text: "Improve communication clarity", 
+        metric: "Reduced misunderstandings", 
+        horizon_days: 30 
+      }],
+      policy: [{ 
+        text: "Establish clear guidelines", 
+        metric: "Documented procedures", 
+        horizon_days: 60 
+      }]
+    },
+    safety_notes: {
+      warnings: ["This is a fallback response due to processing limitations."],
+      rejected_content: false
+    }
+  },
   s1: { 
     themes: ["Communication", "Process Improvement"],
     claims: [{ text: "The system encountered an error processing your input.", type: "inference" }],
@@ -181,17 +243,50 @@ export async function POST(req: Request) {
     if (stage === "oneshot") {
       try {
         console.log("Processing one-shot request with emphasis:", emphasis);
-        const result = await processOneShot(input, emphasis);
+        
+        // Add a timeout for the entire operation
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("Request timed out after 2 minutes")), 120000);
+        });
+        
+        // Race between the actual processing and the timeout
+        const result = await Promise.race([
+          processOneShot(input, emphasis),
+          timeoutPromise
+        ]) as any;
+        
+        // Validate the result against the schema
         const validated = bridge_output_v1.parse(result);
         return NextResponse.json({ ok: true, data: validated });
       } catch (e: any) {
         console.error("Error in one-shot processing:", e);
-        // Fall back to staged approach if one-shot fails
+        
+        // Check if it's a timeout error
+        if (e.message && e.message.includes("timed out")) {
+          console.log("Request timed out, using fallback response");
+          return NextResponse.json({ 
+            ok: true, 
+            data: fallbacks.oneshot,
+            warning: "Used fallback data due to timeout"
+          });
+        }
+        
+        // Check if it's a JSON parsing error
+        if (e.message && (e.message.includes("JSON") || e.message.includes("parse"))) {
+          console.log("JSON parsing error, using fallback response");
+          return NextResponse.json({ 
+            ok: true, 
+            data: fallbacks.oneshot,
+            warning: "Used fallback data due to JSON parsing error"
+          });
+        }
+        
+        // For other errors, use the fallback
         return NextResponse.json({ 
-          ok: false, 
-          error: "One-shot processing failed. Please try the staged approach.",
-          fallback: true
-        }, { status: 422 });
+          ok: true, 
+          data: fallbacks.oneshot,
+          warning: "Used fallback data due to processing error: " + e.message
+        });
       }
     }
     

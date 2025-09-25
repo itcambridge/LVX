@@ -83,11 +83,20 @@ export async function processOneShot(input: string, emphasis: string = "balanced
 
     console.log("Making one-shot OpenAI request with emphasis:", emphasis);
 
+    // Truncate input if it's too long to prevent timeouts
+    const truncatedInput = input.length > 4000 
+      ? input.substring(0, 4000) + "... (truncated for processing)"
+      : input;
+
+    // Set a timeout for the API call
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+    
     const res = await openai.chat.completions.create({
       model: "gpt-4-turbo",
       messages: [
         { role: "system", content: SYSTEM_CORE }, 
-        { role: "user", content: P_ONE_SHOT + `\nInput: ${input}\nEmphasis: ${emphasis}` }
+        { role: "user", content: P_ONE_SHOT + `\nInput: ${truncatedInput}\nEmphasis: ${emphasis}` }
       ],
       tools: [{
         type: "function",
@@ -100,7 +109,10 @@ export async function processOneShot(input: string, emphasis: string = "balanced
       tool_choice: { type: "function", function: { name: "process_bridge_output" } },
       temperature: 0.7,
       max_tokens: 4000
-    });
+    }, { signal: controller.signal });
+    
+    // Clear the timeout
+    clearTimeout(timeoutId);
 
     // Extract the tool call response
     const toolCalls = res.choices[0]?.message?.tool_calls;
@@ -108,10 +120,32 @@ export async function processOneShot(input: string, emphasis: string = "balanced
       throw new Error("Invalid API response format");
     }
 
-    // Parse the function arguments
+    // Parse the function arguments with robust error handling
     const functionCall = toolCalls[0];
     if (functionCall.type === 'function') {
-      return JSON.parse(functionCall.function.arguments);
+      try {
+        // Attempt to parse the JSON
+        return JSON.parse(functionCall.function.arguments);
+      } catch (parseError: any) {
+        console.error("JSON parsing error:", parseError.message);
+        
+        // Attempt to fix common JSON issues
+        let fixedJson = functionCall.function.arguments;
+        
+        // Replace any trailing commas before closing brackets
+        fixedJson = fixedJson.replace(/,\s*([\]}])/g, '$1');
+        
+        // Fix unescaped quotes within strings
+        fixedJson = fixedJson.replace(/([^\\])"/g, '$1\\"');
+        
+        // Try parsing the fixed JSON
+        try {
+          return JSON.parse(fixedJson);
+        } catch (fixError: any) {
+          console.error("Failed to fix JSON:", fixError.message);
+          throw new Error("Failed to parse OpenAI response: " + parseError.message);
+        }
+      }
     } else {
       throw new Error("Unsupported tool call type");
     }
