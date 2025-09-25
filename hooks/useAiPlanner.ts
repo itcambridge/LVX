@@ -95,12 +95,16 @@ export function useAiPlanner(projectId: string) {
       if (!response.ok) {
         const errorData = await response.json();
         console.error("Error saving draft:", errorData);
+        // Don't show error to user for background saves
       } else {
+        const data = await response.json();
+        console.log("Save result:", data);
         // Increment version for next save
         setVersion(v => v + 1);
       }
     } catch (err: any) {
       console.error("Failed to save draft:", err);
+      // Don't show error to user for background saves
     }
   }
 
@@ -165,6 +169,9 @@ export function useAiPlanner(projectId: string) {
     setError(null);
     
     try {
+      // First ensure the draft is saved
+      await save(output);
+      
       const response = await fetch("/api/projects/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -177,16 +184,18 @@ export function useAiPlanner(projectId: string) {
         })
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to publish");
+      const data = await response.json();
+      
+      if (!data.ok) {
+        console.error("Publish error:", data.error);
+        throw new Error(typeof data.error === 'string' ? data.error : "Failed to publish");
       }
       
       setLoading(false);
       return true;
     } catch (err: any) {
       console.error("Publish error:", err);
-      setError(err.message || "Failed to publish");
+      setError(err.message || "Failed to publish. Please try again.");
       setLoading(false);
       return false;
     }

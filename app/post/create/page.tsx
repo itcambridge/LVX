@@ -47,9 +47,15 @@ function CreatePostInner() {
   }
 
   async function handlePublish() {
-    const success = await planner.publish();
-    if (success) {
-      router.push(`/project/${projectId}`);
+    try {
+      setError(null);
+      const success = await planner.publish();
+      if (success) {
+        router.push(`/project/${projectId}`);
+      }
+    } catch (err: any) {
+      console.error("Error in handlePublish:", err);
+      setError(err.message || "Failed to publish. Please try again.");
     }
   }
 
@@ -69,6 +75,20 @@ function CreatePostInner() {
         <div className={`${planner.error.startsWith('Note:') ? 'bg-yellow-100 border-yellow-400 text-yellow-700' : 'bg-red-100 border-red-400 text-red-700'} px-4 py-3 rounded relative mb-4 border`}>
           <p className="font-medium">{planner.error.startsWith('Note:') ? 'Note:' : 'Error:'}</p>
           <p>{planner.error.startsWith('Note:') ? planner.error.substring(6) : planner.error}</p>
+          <button 
+            className="absolute top-0 right-0 px-4 py-3" 
+            onClick={() => planner.error?.startsWith('Note:') ? null : setError(null)}
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+      
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+          <p className="font-medium">Error:</p>
+          <p>{error}</p>
           <button 
             className="absolute top-0 right-0 px-4 py-3" 
             onClick={() => setError(null)}
