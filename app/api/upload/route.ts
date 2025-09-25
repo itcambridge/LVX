@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// Set the maximum file size to 2MB
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+// Configure the API route to handle larger payloads
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '2mb',
+    },
+  },
+};
 
 export async function POST(req: Request) {
   try {
@@ -16,6 +28,14 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "No file provided" },
         { status: 400 }
+      );
+    }
+    
+    // Check file size on the server side as well
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `File size exceeds the ${MAX_FILE_SIZE / (1024 * 1024)}MB limit` },
+        { status: 413 }
       );
     }
 
@@ -56,6 +76,23 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     console.error("Unexpected error:", error);
+    
+    // Check if it's a file size error
+    if (error.message && error.message.includes("size")) {
+      return NextResponse.json(
+        { error: `File size exceeds the ${MAX_FILE_SIZE / (1024 * 1024)}MB limit` },
+        { status: 413 }
+      );
+    }
+    
+    // Handle Supabase storage quota errors
+    if (error.message && error.message.includes("quota")) {
+      return NextResponse.json(
+        { error: "Storage quota exceeded. Please contact support." },
+        { status: 507 }
+      );
+    }
+    
     return NextResponse.json(
       { error: error.message || "Failed to upload file" },
       { status: 500 }

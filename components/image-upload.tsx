@@ -26,9 +26,9 @@ export function ImageUpload({ onImageUploaded, className = "" }: ImageUploadProp
       return;
     }
 
-    // Check file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Image size should be less than 5MB");
+    // Check file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Image size should be less than 2MB");
       return;
     }
 
@@ -58,8 +58,28 @@ export function ImageUpload({ onImageUploaded, className = "" }: ImageUploadProp
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to upload image");
+        // Try to parse the error as JSON, but handle HTML responses
+        try {
+          const text = await response.text();
+          // Check if the response is HTML
+          if (text.trim().startsWith('<')) {
+            if (response.status === 413) {
+              throw new Error("Image is too large. Please use a smaller image (max 2MB).");
+            } else {
+              throw new Error(`Server error: ${response.status}`);
+            }
+          }
+          
+          // Try to parse as JSON
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.error || "Failed to upload image");
+        } catch (parseError) {
+          // If JSON parsing fails, use the error we already created or a generic one
+          if (parseError instanceof Error && parseError.message !== "Unexpected token < in JSON at position 0") {
+            throw parseError;
+          }
+          throw new Error("Failed to upload image. Please try a smaller image.");
+        }
       }
 
       const data = await response.json();
