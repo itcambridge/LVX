@@ -23,10 +23,14 @@ export async function POST(req: Request) {
       const { error: insertError } = await s.from("projects").insert({
         id: projectId,
         title: "Draft Bridge Story",
+        summary: bundlePatch?.bridge_story?.thin_edge || "Draft Bridge Story Summary",
+        tldr: bundlePatch?.bridge_story?.paragraphs?.[0] || "Draft summary paragraph",
+        description: bundlePatch?.bridge_story?.paragraphs?.join("\n\n") || "Draft description",
         status: "draft",
         routine_stage: stage || "oneshot",
         plan_bundle: bundlePatch,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        fund_goal: 0 // Required field with a default value
       });
 
       if (insertError) {

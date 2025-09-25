@@ -23,12 +23,14 @@ export async function POST(req: Request) {
       const { error: insertError } = await s.from("projects").insert({
         id: projectId,
         title: title || "Bridge Story",
+        summary: tldr || "Bridge Story Summary", // Required field
         tldr: tldr || "",
         description: body_markdown || "",
         to_verify_items: to_verify_items || null,
         status: "published",
         routine_completed: true,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        fund_goal: 0 // Required field with a default value
       });
 
       if (insertError) {
@@ -46,6 +48,7 @@ export async function POST(req: Request) {
 
     const { error } = await s.from("projects").update({
       title, 
+      summary: tldr || "Bridge Story Summary", // Ensure summary is updated
       tldr, 
       description: body_markdown,
       to_verify_items: to_verify_items || null,
